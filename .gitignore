@@ -1,0 +1,14 @@
+*
+# ignore all but these files:
+!.gitignore
+!README.md
+!LICENSE
+!Makefile
+!/include
+!/include/*.h
+!/src
+!/src/*.c
+!/src/*.cpp
+!/tests
+!/tests/nestest.nes
+!/tests/nestest.log
