@@ -114,7 +114,7 @@ int memory_init(const char *filename, ppu_s *p, char *e_context) {
     return -E_NO_FILE;
   }
   if ((fp = fopen(filename, "rb")) == NULL) {
-    strcpy(e_context, filename);
+    strncpy(e_context, filename, LEN_E_CONTEXT - 1);
     return -E_OPEN_FILE;
   }
   if (fread(ines_header_bytes, sizeof(char), 16, fp) < 16) {
