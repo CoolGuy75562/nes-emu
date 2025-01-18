@@ -14,8 +14,6 @@
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-//#include "mainwindow.h"
-
 #include <cstdio>
 #include <iostream>
 #include <memory>
@@ -26,31 +24,81 @@ extern "C" {
 #include <unistd.h>
 }
 
-static void log_cpu_nestest(cpu_state_s *cpu_state);
-static void log_ppu_none(ppu_state_s *ppu_state);
-static void log_memory_none(uint16_t addr, uint8_t val);
-static void log_none(const char *, ...);
+static void print_usage(void);
 
-static void put_pixel(int i, int j, uint8_t pallete_idx);
+static void log_memory_fetch(uint16_t addr, uint8_t val);
+static void log_memory_write(uint16_t addr, uint8_t val);
+static void log_cpu_nestest(cpu_state_s *cpu_state);
+static void log_cpu(cpu_state_s *cpu_state);
+static void log_ppu(ppu_state_s *ppu_state);
+
+static void put_pixel(int i, int j, uint8_t pallete_idx) {}
+static void log_none(const char *format, ...) {}
+static void log_memory_none(uint16_t addr, uint8_t val) {}
+static void log_cpu_none(cpu_state_s *cpu_state) {}
+static void log_ppu_none(ppu_state_s *ppu_state) {}
 
 int main(int argc, char **argv) {
 
-
-
-  int opt, exec_status, nestest = 1;
+  int opt, nestest = 0, ignore_cpu = 0, ignore_ppu = 0, ignore_memory = 0;
   cpu_s *cpu = nullptr;
   ppu_s *ppu = nullptr;
-  const char *rom_filename = "../tests/nestest.nes";
+  const char *rom_filename = NULL;
 
-  cpu_register_state_callback(&log_cpu_nestest);
+  while ((opt = getopt(argc, argv, ":r:ncpm")) != -1) {
+    switch (opt) {
+    case 'r':
+      rom_filename = optarg;
+      break;
+    case 'n':
+      nestest = 1;
+      break;
+    case 'c':
+      ignore_cpu = 1;
+      break;
+    case 'p':
+      ignore_ppu = 1;
+      break;
+    case 'm':
+      ignore_memory = 1;
+      break;
+    case ':':
+      fprintf(stderr, "Option -%c requires an operand\n", optopt);
+      print_usage();
+      return EXIT_FAILURE;
+    case '?':
+      fprintf(stderr, "Unrecognised option -%c\n", optopt);
+      print_usage();
+      return EXIT_FAILURE;
+    }
+  }
 
-  /* just for now we don't care about the other callbacks */
+  if (ignore_cpu) {
+    cpu_register_state_callback(&log_cpu_none);
+  } else if (nestest) {
+    cpu_register_state_callback(&log_cpu_nestest);
+  } else {
+    cpu_register_state_callback(&log_cpu);
+  }
+
+  if (nestest || ignore_ppu) {
+    ppu_register_state_callback(&log_ppu_none);
+  } else {
+    ppu_register_state_callback(&log_ppu);
+  }
+
+  if (nestest || ignore_memory) {
+    memory_register_cb(&log_memory_none, MEMORY_CB_FETCH);
+    memory_register_cb(&log_memory_none, MEMORY_CB_WRITE);
+  } else {
+    memory_register_cb(&log_memory_fetch, MEMORY_CB_FETCH);
+    memory_register_cb(&log_memory_write, MEMORY_CB_WRITE);
+  }
+
+  /* Error callbacks don't do much right now */
   cpu_register_error_callback(&log_none);
-  ppu_register_state_callback(&log_ppu_none);
   ppu_register_error_callback(&log_none);
-  memory_register_cb(&log_memory_none, MEMORY_CB_FETCH);
-  memory_register_cb(&log_memory_none, MEMORY_CB_WRITE);
-
+  
   try {
     nes_ppu_init(&ppu, &put_pixel);
     std::unique_ptr<ppu_s, void (*)(ppu_s *)> ppu_ptr(ppu, &ppu_destroy);
@@ -63,12 +111,22 @@ int main(int argc, char **argv) {
     /* begin the main loop */
     nes_cpu_exec(cpu_ptr.get());
 
-  } catch (std::exception &e) {
+  } catch (NESError &e) {
     std::cout << e.what() << std::endl;
     return EXIT_FAILURE;
   }
 
   return EXIT_SUCCESS;
+}
+
+static void print_usage(void) { std::cout << "usage" << std::endl; }
+
+static void log_memory_fetch(uint16_t addr, uint8_t val) {
+  std::printf("[MEM] Fetched val %02x from addr %04x\n", val, addr);
+}
+
+static void log_memory_write(uint16_t addr, uint8_t val) {
+  std::printf("[MEM] Wrote val %02x to addr %04x\n", val, addr);
 }
 
 static void log_cpu_nestest(cpu_state_s *cpu_state) {
@@ -79,8 +137,17 @@ static void log_cpu_nestest(cpu_state_s *cpu_state) {
               cpu_state->sp, cpu_state->cycles);
 }
 
-static void log_ppu_none(ppu_state_s *ppu_state) {}
-static void log_memory_none(uint16_t addr, uint8_t val) {}
-static void log_none(const char *, ...) {}
+static void log_cpu(cpu_state_s *cpu_state) {
+  std::printf("[CPU] PC=%04x OPC=%02x %s (%s) A=%02x X=%02x Y=%02x P=%02x "
+              "SP=%02x CYC=%d\n",
+              cpu_state->pc, cpu_state->opc, cpu_state->curr_instruction,
+              cpu_state->curr_addr_mode, cpu_state->a, cpu_state->x,
+              cpu_state->y, cpu_state->p, cpu_state->sp, cpu_state->cycles);
+}
 
-static void put_pixel(int i, int j, uint8_t palette_idx) {}
+static void log_ppu(ppu_state_s *ppu_state) {
+  std::printf("[PPU] CYC=%d SCL=%d v=%04x t=%04x x=%02x w=%d\n",
+              ppu_state->cycles, ppu_state->scanline, ppu_state->v,
+              ppu_state->t, ppu_state->x, ppu_state->w);
+}
+  
