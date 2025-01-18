@@ -21,10 +21,6 @@
 
 #include "core/cppwrapper.hpp"
 
-extern "C" {
-#include <unistd.h>
-}
-
 #define NESTEST_LINES 8991
 
 static void log_cpu_nestest(cpu_state_s *cpu_state);
