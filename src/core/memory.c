@@ -101,6 +101,9 @@ int memory_init(const char *filename, ppu_s *p, char *e_context) {
   if (on_fetch == NULL || on_write == NULL) {
     return -E_NO_CALLBACK;
   }
+  if (p == NULL) {
+    return -E_NO_PPU;
+  }
   FILE *fp;
   char ines_header_bytes[16];
   int err;

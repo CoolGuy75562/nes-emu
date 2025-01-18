@@ -140,19 +140,21 @@ static uint8_t memory_secondary_oam[32] = {0};
 static void (*log_error)(const char *, ...) = NULL;
 static void (*on_ppu_state_update)(ppu_state_s *ppu_state) = NULL;
 static void (*put_pixel)(int i, int j, uint8_t palette_idx) = NULL;
-
+static uint8_t to_def_log_error = 1, to_def_on_ppu_state_update = 1;
 /*----------------------------------------------------------------------------*/
 void ppu_register_state_callback(void (*ppu_state_cb)(ppu_state_s *)) {
   on_ppu_state_update = ppu_state_cb;
+  to_def_on_ppu_state_update = 0;
 }
 
 void ppu_register_error_callback(void (*log_error_cb)(const char *, ...)) {
   log_error = log_error_cb;
+  to_def_log_error = 0;
 }
 
 int ppu_init(ppu_s **p, void (*put_pixel_cb)(int, int, uint8_t)) {
   put_pixel = put_pixel_cb;
-  if (log_error == NULL || on_ppu_state_update == NULL) {
+  if (to_def_log_error || to_def_on_ppu_state_update) {
     return -E_NO_CALLBACK;
   }
   if ((*p = calloc(1, sizeof(ppu_s))) == NULL) {

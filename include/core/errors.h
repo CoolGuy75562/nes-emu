@@ -20,7 +20,8 @@
 #define LEN_E_CONTEXT 256
 
 #define ERROR_LIST                                                             \
-  X(E_NO_ERROR, ""), X(E_NO_CALLBACK, "Not all callbacks registered"),         \
+  X(E_NO_ERROR, ""), X(E_NO_PPU, "PPU not initialised"),                       \
+      X(E_NO_CALLBACK, "Not all callbacks registered"),                        \
       X(E_NO_FILE, "File path is null"), X(E_ILLEGAL_OPC, "Illegal opcode"),   \
       X(E_READ_FILE, "Error reading file"),                                    \
       X(E_MALLOC, "Error allocating memory"),                                  \

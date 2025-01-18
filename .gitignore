@@ -28,5 +28,6 @@
 !/tests/nestest.cpp
 !/tests/nestest.hpp
 !/tests/nestest.nes
+!/tests/mapper_6.nes
 !/tests/nestest.log
 !/tests/CMakeLists.txt

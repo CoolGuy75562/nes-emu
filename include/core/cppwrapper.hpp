@@ -32,10 +32,11 @@ extern std::string error_messages[];
 
 class NESError : public std::runtime_error {
 public:
-  explicit NESError(error_e err, const std::string &info);
-  explicit NESError(error_e err);
+  explicit NESError(int err, const std::string &info);
+  explicit NESError(int err);
+
 private:
-  std::string errorMessage(error_e err, const std::string &info = "");
+  std::string errorMessage(int err, const std::string &info = "");
 };
 
 void nes_memory_init(const std::string &rom_filename, ppu_s *ppu);
