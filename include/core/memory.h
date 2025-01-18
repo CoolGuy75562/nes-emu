@@ -17,7 +17,7 @@
 #ifndef MEMORY_H_
 #define MEMORY_H_
 
-#include "ppu.h"
+#include "core/ppu.h"
 #include <stdint.h>
 
 typedef enum memory_cb_e { MEMORY_CB_WRITE, MEMORY_CB_FETCH } memory_cb_e;

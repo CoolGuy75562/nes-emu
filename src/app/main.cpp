@@ -14,11 +14,13 @@
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+//#include "mainwindow.h"
+
 #include <cstdio>
 #include <iostream>
 #include <memory>
 
-#include "nes_c_wrapper.h"
+#include "core/cppwrapper.hpp"
 
 extern "C" {
 #include <unistd.h>
@@ -33,27 +35,12 @@ static void put_pixel(int i, int j, uint8_t pallete_idx);
 
 int main(int argc, char **argv) {
 
-  int opt, nestest, exec_status;
-  const char *rom_filename;
+
+
+  int opt, exec_status, nestest = 1;
   cpu_s *cpu = nullptr;
   ppu_s *ppu = nullptr;
-
-  while ((opt = getopt(argc, argv, ":r:n")) != -1) {
-    switch (opt) {
-    case 'r':
-      rom_filename = optarg;
-      break;
-    case 'n':
-      nestest = 1;
-      break;
-    case ':':
-      std::fprintf(stderr, "Option -%c requires an operand\n", optopt);
-      return EXIT_FAILURE;
-    case '?':
-      std::fprintf(stderr, "Unrecognised option -%c\n", optopt);
-      return EXIT_FAILURE;
-    }
-  }
+  const char *rom_filename = "../tests/nestest.nes";
 
   cpu_register_state_callback(&log_cpu_nestest);
 

@@ -18,8 +18,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "errors.h"
-#include "ppu.h"
+#include "core/errors.h"
+#include "core/ppu.h"
 
 #define MASK_PPUCTRL_NAMETABLE 0x3
 #define MASK_PPUCTRL_INCREMENT 0x4

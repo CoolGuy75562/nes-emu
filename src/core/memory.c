@@ -17,8 +17,8 @@
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "memory.h"
-#include "errors.h"
+#include "core/memory.h"
+#include "core/errors.h"
 
 #include <ctype.h>
 #include <stdio.h>
