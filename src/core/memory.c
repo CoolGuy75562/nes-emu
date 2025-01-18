@@ -1,7 +1,7 @@
 /* This module is responsible for memory and parsing the ines input file.
  * The ppu memory map is implemented in this module... */
 
-/* Copyright (C) 2024  Angus McLean
+/* Copyright (C) 2024, 2025  Angus McLean
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
