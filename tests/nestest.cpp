@@ -57,23 +57,20 @@ std::vector<std::string> nestest(void) {
   nes_cpu_init(&cpu, nestest);
   std::unique_ptr<cpu_s, void (*)(cpu_s *)> cpu_ptr(cpu, &cpu_destroy);
 
-  /* begin the cpu execution loop */
-  try {
-  nes_cpu_exec(cpu_ptr.get());
-  } catch (NESError &e) {}
+  for (int i = 0; i < NESTEST_LINES; i++) {
+    nes_cpu_exec(cpu_ptr.get());
+  }
   return output_lines;
 }
 
 static void log_cpu_nestest(cpu_state_s *cpu_state) {
+  static char buf[256];
   static int line_num = 1;
-  char buf[256];
-  std::snprintf(buf, 256, "%d %04x %02x %s %02x %02x %02x %02x %02x %d", line_num,
+  std::snprintf(buf, 256, "%d %04x %02x %s %02x %02x %02x %02x %02x %d", line_num++,
               cpu_state->pc, cpu_state->opc, cpu_state->curr_instruction,
               cpu_state->a, cpu_state->x, cpu_state->y, cpu_state->p,
               cpu_state->sp, cpu_state->cycles);
-  if (line_num++ < NESTEST_LINES + 1) {
-    output_lines.push_back(std::string(buf));
-  }
+  output_lines.push_back(std::string(buf));
 }
 
 

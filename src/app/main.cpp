@@ -14,17 +14,30 @@
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include <QApplication>
+#include <QFileDialog>
+#include <QMainWindow>
+#include <QString>
+#include <QTimer>
+#include <QMessageBox>
+
 #include <cstdio>
 #include <iostream>
 #include <memory>
-
-#include "core/cppwrapper.hpp"
+#include <string>
 
 extern "C" {
 #include <unistd.h>
 }
 
-static void print_usage(void);
+#include "core/cppwrapper.hpp"
+#include "mainwindow.h"
+
+static inline void show_error(QWidget *parent, NESError &e);
+static void nes_init(std::unique_ptr<cpu_s, void (*)(cpu_s *)> &cpu_ptr,
+                     std::unique_ptr<ppu_s, void (*)(ppu_s *)> &ppu_ptr,
+                     std::string &rom_filename);
+static void step_cpu(QApplication *a);
 
 static void log_memory_fetch(uint16_t addr, uint8_t val);
 static void log_memory_write(uint16_t addr, uint8_t val);
@@ -40,86 +53,67 @@ static void log_ppu_none(ppu_state_s *ppu_state) {}
 
 int main(int argc, char **argv) {
 
-  int opt, nestest = 0, ignore_cpu = 0, ignore_ppu = 0, ignore_memory = 0;
-  cpu_s *cpu = nullptr;
-  ppu_s *ppu = nullptr;
-  const char *rom_filename = NULL;
+  QApplication a(argc, argv);
+  MainWindow w;
+  w.show();
 
-  while ((opt = getopt(argc, argv, ":r:ncpm")) != -1) {
-    switch (opt) {
-    case 'r':
-      rom_filename = optarg;
-      break;
-    case 'n':
-      nestest = 1;
-      break;
-    case 'c':
-      ignore_cpu = 1;
-      break;
-    case 'p':
-      ignore_ppu = 1;
-      break;
-    case 'm':
-      ignore_memory = 1;
-      break;
-    case ':':
-      fprintf(stderr, "Option -%c requires an operand\n", optopt);
-      print_usage();
-      return EXIT_FAILURE;
-    case '?':
-      fprintf(stderr, "Unrecognised option -%c\n", optopt);
-      print_usage();
-      return EXIT_FAILURE;
-    }
-  }
+  std::string rom_filename =
+      QFileDialog::getOpenFileName(&w, "Open File", "/home", "NES ROM (*.nes)")
+          .toStdString();
 
-  if (ignore_cpu) {
-    cpu_register_state_callback(&log_cpu_none);
-  } else if (nestest) {
-    cpu_register_state_callback(&log_cpu_nestest);
-  } else {
-    cpu_register_state_callback(&log_cpu);
-  }
+  std::unique_ptr<cpu_s, void (*)(cpu_s *)> cpu_ptr(nullptr, &cpu_destroy);
+  std::unique_ptr<ppu_s, void (*)(ppu_s *)> ppu_ptr(nullptr, &ppu_destroy);
 
-  if (nestest || ignore_ppu) {
-    ppu_register_state_callback(&log_ppu_none);
-  } else {
-    ppu_register_state_callback(&log_ppu);
-  }
-
-  if (nestest || ignore_memory) {
-    memory_register_cb(&log_memory_none, MEMORY_CB_FETCH);
-    memory_register_cb(&log_memory_none, MEMORY_CB_WRITE);
-  } else {
-    memory_register_cb(&log_memory_fetch, MEMORY_CB_FETCH);
-    memory_register_cb(&log_memory_write, MEMORY_CB_WRITE);
-  }
-
-  /* Error callbacks don't do much right now */
-  cpu_register_error_callback(&log_none);
-  ppu_register_error_callback(&log_none);
-  
   try {
-    nes_ppu_init(&ppu, &put_pixel);
-    std::unique_ptr<ppu_s, void (*)(ppu_s *)> ppu_ptr(ppu, &ppu_destroy);
-
-    nes_memory_init(rom_filename, ppu_ptr.get());
-
-    nes_cpu_init(&cpu, nestest);
-    std::unique_ptr<cpu_s, void (*)(cpu_s *)> cpu_ptr(cpu, &cpu_destroy);
-
-    /* begin the main loop */
-    nes_cpu_exec(cpu_ptr.get());
-
+    nes_init(cpu_ptr, ppu_ptr, rom_filename);
   } catch (NESError &e) {
-    std::cout << e.what() << std::endl;
-    return EXIT_FAILURE;
+    show_error(&w, e);
+    exit(EXIT_FAILURE);
   }
 
-  return EXIT_SUCCESS;
+  QTimer *timer = new QTimer(&w);
+  QObject::connect(timer, &QTimer::timeout, [&cpu_ptr, &w] {
+    try {
+      if (nes_cpu_exec(cpu_ptr.get()) == 0) {
+	QCoreApplication::quit();
+      }
+    } catch (NESError &e) {
+      show_error(&w, e);
+      QCoreApplication::quit();
+    }
+  });
+  timer->start();
+  
+  return a.exec();
 }
 
-static void print_usage(void) { std::cout << "usage" << std::endl; }
+static void nes_init(std::unique_ptr<cpu_s, void (*)(cpu_s *)> &cpu_ptr,
+                     std::unique_ptr<ppu_s, void (*)(ppu_s *)> &ppu_ptr,
+                     std::string &rom_filename) {
+
+  cpu_s *cpu = nullptr;
+  ppu_s *ppu = nullptr;
+
+  cpu_register_error_callback(&log_none);
+  cpu_register_state_callback(&log_cpu_none);
+  ppu_register_error_callback(&log_none);
+  ppu_register_state_callback(&log_ppu_none);
+  memory_register_cb(&log_memory_none, MEMORY_CB_FETCH);
+  memory_register_cb(&log_memory_none, MEMORY_CB_WRITE);
+  
+  nes_ppu_init(&ppu, &put_pixel);
+  ppu_ptr.reset(ppu);
+
+  nes_memory_init(rom_filename, ppu);
+
+  nes_cpu_init(&cpu, 1);
+  cpu_ptr.reset(cpu);
+}
+
+static inline void show_error(QWidget *parent, NESError &e) {
+  std::cout << e.what() << std::endl;
+  QMessageBox::critical(parent, "Error", e.what());
+}
 
 static void log_memory_fetch(uint16_t addr, uint8_t val) {
   std::printf("[MEM] Fetched val %02x from addr %04x\n", val, addr);
@@ -150,4 +144,3 @@ static void log_ppu(ppu_state_s *ppu_state) {
               ppu_state->cycles, ppu_state->scanline, ppu_state->v,
               ppu_state->t, ppu_state->x, ppu_state->w);
 }
-  

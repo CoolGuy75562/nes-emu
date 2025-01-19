@@ -67,13 +67,14 @@ void nes_cpu_init(cpu_s **cpu, int nestest) {
   }
 }
 
-void nes_cpu_exec(cpu_s *cpu) {
-  char e_context[LEN_E_CONTEXT];
+int nes_cpu_exec(cpu_s *cpu) {
+  static char e_context[LEN_E_CONTEXT];
+  static int exec_status;
   *e_context = '\0';
-  int exec_status = 0;
-  while ((exec_status = cpu_exec(cpu, e_context)) == 1)
-    ;
+
+  exec_status = cpu_exec(cpu, e_context);
   if (exec_status < 0) {
     throw NESError(-exec_status, std::string(e_context));
   }
+  return exec_status;
 }
