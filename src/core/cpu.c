@@ -513,9 +513,14 @@ void cpu_register_state_callback(void (*cpu_state_cb)(cpu_state_s *)) {
   on_cpu_state_update = cpu_state_cb;
 }
 
+void cpu_unregister_state_callback(void) { on_cpu_state_update = NULL; }
+
+
 void cpu_register_error_callback(void (*log_error_cb)(const char *, ...)) {
   log_error = log_error_cb;
 }
+
+void cpu_unregister_error_callback(void) { log_error = NULL; }
 
 int cpu_init(cpu_s **p_cpu, uint8_t nestest) {
   if (on_cpu_state_update == NULL || log_error == NULL) {
@@ -564,6 +569,9 @@ void cpu_destroy(cpu_s *cpu) { free(cpu); }
  * TODO: Proper interrupt handling
  */
 int cpu_exec(cpu_s *cpu, char *e_context) {
+  if (on_cpu_state_update == NULL || log_error == NULL) {
+    return -E_NO_CALLBACK;
+  }
   update_cpu_state(cpu);
   update_flags(cpu);
   uint8_t opc = fetch8(cpu, cpu->pc++); /* 1 cycle */

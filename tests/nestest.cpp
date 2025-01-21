@@ -60,6 +60,15 @@ std::vector<std::string> nestest(void) {
   for (int i = 0; i < NESTEST_LINES; i++) {
     nes_cpu_exec(cpu_ptr.get());
   }
+
+  /* reset global state */
+  cpu_unregister_error_callback();
+  cpu_unregister_state_callback();
+  ppu_unregister_error_callback();
+  ppu_unregister_state_callback();
+  memory_unregister_cb(MEMORY_CB_FETCH);
+  memory_unregister_cb(MEMORY_CB_WRITE);
+  
   return output_lines;
 }
 

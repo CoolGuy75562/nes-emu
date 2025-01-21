@@ -38,8 +38,11 @@ typedef struct cpu_s cpu_s;
 
 /* called with current cpu state after each instruction (for now) */
 void cpu_register_state_callback(void (*cpu_state_cb)(cpu_state_s *));
+void cpu_unregister_state_callback(void);
+
 /* called when error e.g. illegal opcode */
 void cpu_register_error_callback(void (*log_error_cb)(const char *, ...));
+void cpu_unregister_error_callback(void);
 
 /* allocate memory to opaque pointer cpu_s * and initialise cpu
 *

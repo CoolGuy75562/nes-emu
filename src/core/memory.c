@@ -97,6 +97,17 @@ void memory_register_cb(void (*memory_cb)(uint16_t, uint8_t),
   }
 }
 
+void memory_unregister_cb(memory_cb_e cb_type) {
+  switch (cb_type) {
+  case MEMORY_CB_FETCH:
+    on_fetch = NULL;
+    break;
+  case MEMORY_CB_WRITE:
+    on_write = NULL;
+    break;
+  }
+}
+
 int memory_init(const char *filename, ppu_s *p, char *e_context) {
   if (on_fetch == NULL || on_write == NULL) {
     return -E_NO_CALLBACK;
