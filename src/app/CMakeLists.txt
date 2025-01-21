@@ -12,7 +12,13 @@ add_executable(nes-emu
     main.cpp
     mainwindow.ui
     mainwindow.cpp
+    nescontext.cpp
+    nesscreen.cpp
+    openglwidget.cpp
 )
+
+target_include_directories(nes-emu PRIVATE ${PROJECT_SOURCE_DIR}/src/app )
+
 set_target_properties(nes-emu
     PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}

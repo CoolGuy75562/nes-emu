@@ -17,27 +17,20 @@
 #include <QApplication>
 #include <QFileDialog>
 #include <QMainWindow>
+#include <QMessageBox>
 #include <QString>
 #include <QTimer>
-#include <QMessageBox>
+#include <QtDebug>
 
 #include <cstdio>
 #include <iostream>
 #include <memory>
 #include <string>
 
-extern "C" {
-#include <unistd.h>
-}
-
 #include "core/cppwrapper.hpp"
 #include "mainwindow.h"
-
-static inline void show_error(QWidget *parent, NESError &e);
-static void nes_init(std::unique_ptr<cpu_s, void (*)(cpu_s *)> &cpu_ptr,
-                     std::unique_ptr<ppu_s, void (*)(ppu_s *)> &ppu_ptr,
-                     std::string &rom_filename);
-static void step_cpu(QApplication *a);
+#include "nescontext.h"
+#include "nesscreen.h"
 
 static void log_memory_fetch(uint16_t addr, uint8_t val);
 static void log_memory_write(uint16_t addr, uint8_t val);
@@ -45,83 +38,87 @@ static void log_cpu_nestest(cpu_state_s *cpu_state);
 static void log_cpu(cpu_state_s *cpu_state);
 static void log_ppu(ppu_state_s *ppu_state);
 
-static void put_pixel(int i, int j, uint8_t pallete_idx) {}
 static void log_none(const char *format, ...) {}
 static void log_memory_none(uint16_t addr, uint8_t val) {}
 static void log_cpu_none(cpu_state_s *cpu_state) {}
 static void log_ppu_none(ppu_state_s *ppu_state) {}
 
+static void init(MainWindow &w);
+
+
 int main(int argc, char **argv) {
 
   QApplication a(argc, argv);
   MainWindow w;
+  /* for some reason I have to do this by hand or else
+   the programme keeps running after I close the window */
+  QObject::connect(&a, SIGNAL(lastWindowClosed()), &a, SLOT(quit()));
+  
+  init(w);
+  return a.exec();
+}
+
+
+static void init(MainWindow &w) {
+  qDebug() << "Initialising MainWindow";
+  NESContext *nes_context;
   w.show();
 
-  std::string rom_filename =
+  const std::string rom_filename =
       QFileDialog::getOpenFileName(&w, "Open File", "/home", "NES ROM (*.nes)")
           .toStdString();
 
-  std::unique_ptr<cpu_s, void (*)(cpu_s *)> cpu_ptr(nullptr, &cpu_destroy);
-  std::unique_ptr<ppu_s, void (*)(ppu_s *)> ppu_ptr(nullptr, &ppu_destroy);
+  /* for now */
+  cpu_register_error_callback(&log_none);
+  ppu_register_error_callback(&log_none);
+  memory_register_cb(&log_memory_none, MEMORY_CB_FETCH);
+  memory_register_cb(&log_memory_none, MEMORY_CB_WRITE);
 
+  /* MainWindow shouldn't really be dealing with this,
+     hopefully I can get QTableView to work at some point */
+
+  cpu_register_state_callback(&MainWindow::static_on_cpu_state_update);
+  ppu_register_state_callback(&MainWindow::static_on_ppu_state_update);
+  
+  /* ew ? */
+  NESScreen *s = new NESScreen(&w);
+  qDebug() << "setOpenGLWidgetNESScreen(s)";
+  w.initOpenGLWidgetNESScreen(s);
+  
   try {
-    nes_init(cpu_ptr, ppu_ptr, rom_filename);
+    qDebug() << "Initialising NESContext";
+    nes_context = new NESContext(rom_filename, &NESScreen::put_pixel, &w);
   } catch (NESError &e) {
     show_error(&w, e);
     exit(EXIT_FAILURE);
   }
 
+  
+  
+  /* when nes execution is done */
+  QObject::connect(nes_context, SIGNAL(nes_done()), &w, SLOT(done()));
+
+  QObject::connect(nes_context, SIGNAL(nes_error(NESError &)), &w,
+                   SLOT(error(NESError &)));
+
   QTimer *timer = new QTimer(&w);
-  QObject::connect(timer, &QTimer::timeout, [&cpu_ptr, &w] {
-    try {
-      if (nes_cpu_exec(cpu_ptr.get()) == 0) {
-	QCoreApplication::quit();
-      }
-    } catch (NESError &e) {
-      show_error(&w, e);
-      QCoreApplication::quit();
-    }
-  });
-  timer->start();
-  
-  return a.exec();
+  QObject::connect(timer, SIGNAL(timeout()), nes_context, SLOT(nes_step()));
+  QObject::connect(&w, SIGNAL(play_button_clicked()), timer, SLOT(start()));
+  QObject::connect(&w, SIGNAL(pause_button_clicked()), timer, SLOT(stop()));
+
+  qDebug() << "Init done";
 }
 
-static void nes_init(std::unique_ptr<cpu_s, void (*)(cpu_s *)> &cpu_ptr,
-                     std::unique_ptr<ppu_s, void (*)(ppu_s *)> &ppu_ptr,
-                     std::string &rom_filename) {
-
-  cpu_s *cpu = nullptr;
-  ppu_s *ppu = nullptr;
-
-  cpu_register_error_callback(&log_none);
-  cpu_register_state_callback(&log_cpu_none);
-  ppu_register_error_callback(&log_none);
-  ppu_register_state_callback(&log_ppu_none);
-  memory_register_cb(&log_memory_none, MEMORY_CB_FETCH);
-  memory_register_cb(&log_memory_none, MEMORY_CB_WRITE);
-  
-  nes_ppu_init(&ppu, &put_pixel);
-  ppu_ptr.reset(ppu);
-
-  nes_memory_init(rom_filename, ppu);
-
-  nes_cpu_init(&cpu, 1);
-  cpu_ptr.reset(cpu);
-}
-
-static inline void show_error(QWidget *parent, NESError &e) {
-  std::cout << e.what() << std::endl;
-  QMessageBox::critical(parent, "Error", e.what());
-}
 
 static void log_memory_fetch(uint16_t addr, uint8_t val) {
   std::printf("[MEM] Fetched val %02x from addr %04x\n", val, addr);
 }
 
+
 static void log_memory_write(uint16_t addr, uint8_t val) {
   std::printf("[MEM] Wrote val %02x to addr %04x\n", val, addr);
 }
+
 
 static void log_cpu_nestest(cpu_state_s *cpu_state) {
   static int line_num = 1;
@@ -131,6 +128,7 @@ static void log_cpu_nestest(cpu_state_s *cpu_state) {
               cpu_state->sp, cpu_state->cycles);
 }
 
+
 static void log_cpu(cpu_state_s *cpu_state) {
   std::printf("[CPU] PC=%04x OPC=%02x %s (%s) A=%02x X=%02x Y=%02x P=%02x "
               "SP=%02x CYC=%d\n",
@@ -138,6 +136,7 @@ static void log_cpu(cpu_state_s *cpu_state) {
               cpu_state->curr_addr_mode, cpu_state->a, cpu_state->x,
               cpu_state->y, cpu_state->p, cpu_state->sp, cpu_state->cycles);
 }
+
 
 static void log_ppu(ppu_state_s *ppu_state) {
   std::printf("[PPU] CYC=%d SCL=%d v=%04x t=%04x x=%02x w=%d\n",

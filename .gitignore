@@ -20,7 +20,9 @@
 !/src/core/CMakeLists.txt
 
 !/src/app
-!/src/app/main.cpp
+!/src/app/*.cpp
+!/src/app/*.h
+!/src/app/*.ui
 !/src/app/CMakeLists.txt
 
 !/tests
