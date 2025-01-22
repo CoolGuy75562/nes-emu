@@ -6,7 +6,7 @@ CPU output is correct when running nestest.nes in automatic mode. PPU and memory
 
 ## Dependencies
 
-Building and running this project currently requires CMake, CTest, the Boost.Units library, and unistd.h. unistd.h is only needed for getopt in src/app/main.cpp, and is only temporary until a proper frontend is implemented in Qt.
+Building and running this project currently requires CMake, CTest, the Boost.Test library, and unistd.h. unistd.h is only needed for getopt in src/app/main.cpp, and is only temporary until a proper frontend is implemented in Qt.
 
 ## Installation
 
