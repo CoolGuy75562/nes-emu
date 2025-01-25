@@ -21,6 +21,9 @@
 #include <string>
 
 /* do nestest and return vector of lines of output */
-std::vector<std::string> nestest(void);
+std::vector<std::string> nestest_actual(void);
+
+/* return vector of lines of neslog.log */
+std::vector<std::string> nestest_log(void);
 
 #endif

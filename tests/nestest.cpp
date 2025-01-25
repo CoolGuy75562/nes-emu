@@ -16,6 +16,7 @@
 
 #include <cstdio>
 #include <iostream>
+#include <fstream>
 #include <memory>
 #include <vector>
 
@@ -32,7 +33,7 @@ static void put_pixel(int i, int j, uint8_t palette_idx) {}
 
 static std::vector<std::string> output_lines;
 
-std::vector<std::string> nestest(void) {
+std::vector<std::string> nestest_actual(void) {
 
   int nestest = 1;
   cpu_s *cpu = nullptr;
@@ -71,6 +72,18 @@ std::vector<std::string> nestest(void) {
   
   return output_lines;
 }
+
+
+std::vector<std::string> nestest_log(void) {
+  std::ifstream neslog("nestest.log");
+  std::vector<std::string> neslog_lines;
+  std::string line;
+  while (getline(neslog, line)) {
+    neslog_lines.push_back(line);
+  }
+  return neslog_lines;
+}
+
 
 static void log_cpu_nestest(cpu_state_s *cpu_state) {
   static char buf[256];

@@ -2,11 +2,13 @@
 
 NES Emulator (WIP)
 
-CPU output is correct when running nestest.nes in automatic mode. PPU and memory both have issues which will be addressed after graphical frontend is implemented.
+CPU output is correct when running nestest.nes in automatic mode, and passes a suite of 10,000 tests for each instruction found here: https://github.com/SingleStepTests/65x02 
+
+PPU is incomplete and memory has some issues, probably to do with mapper.
 
 ## Dependencies
 
-Building and running this project currently requires CMake, CTest, the Boost.Units library, and unistd.h. unistd.h is only needed for getopt in src/app/main.cpp, and is only temporary until a proper frontend is implemented in Qt.
+Building and running this project currently requires CMake, CTest, Boost.Test, Qt5, and optionally RapidJSON to run the Tom Harte cpu tests (see below).
 
 ## Installation
 
@@ -29,12 +31,23 @@ make
 
 The makefile should successfully build everything and run some tests, and the main programme executable nes-test should be located in the root of the build directory.
 
-## Usage
+### Tom Harte CPU tests (optional)
+
+Download the nes test files from here https://github.com/SingleStepTests/65x02 and in the root project directory, create a file named harte_tests_dir_path.txt containing the absolute path to the folder containing the tests:
 
 ```bash
-./nes-emu -r [.nes file] [-n] [-c] [-p] [-m]
+echo "\"/home/path/to/test/folder\"" > harte_tests_dir_path.txt
 ```
 
--n is used for tests/nestest.nes in automatic mode which requires the cpu to be initialised with some slightly different values.
+Building the project as above, in /tests in the build folder there should be a symlink to the directory containing the Harte tests you gave above, and an executable harte_tests. Executing it will run 10,000 test cases for each instruction that has been implemented.
 
--c, -p, -m suppress cpu, ppu, and memory logs respectively.
+## Usage
+
+In the build directory, run the programme
+
+```bash
+./nes-emu
+```
+
+You will be prompted to open a .nes file, and if it has been read successfully you can press "start" to begin execution, and "stop" to stop execution. You will see the contents of the CPU and the current instruction being executed, and the contents of the PPU. The OpenGL widget will probably not show anything interesting because the PPU is still being worked on.
+

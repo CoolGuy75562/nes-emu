@@ -29,7 +29,10 @@
 !/tests/core_tests.cpp
 !/tests/nestest.cpp
 !/tests/nestest.hpp
+!/tests/harte_tests.cpp
+!/tests/harte.hpp
+!/tests/harte.cpp
 !/tests/nestest.nes
-!/tests/mapper_6.nes
+!/tests/mapper_3.nes
 !/tests/nestest.log
 !/tests/CMakeLists.txt

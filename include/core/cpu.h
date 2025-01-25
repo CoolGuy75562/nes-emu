@@ -59,4 +59,10 @@ void cpu_destroy(cpu_s *);
  */
 int cpu_exec(cpu_s *, char *e_context);
 
+/* Resets cpu and sets cpu values to values in cpu_state
+ *
+ * Used for each harte test case
+ */
+void cpu_init_harte_test_case(cpu_s *cpu, cpu_state_s *cpu_state);
+
 #endif

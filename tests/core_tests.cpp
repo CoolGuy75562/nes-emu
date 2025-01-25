@@ -17,12 +17,14 @@
 
 #define BOOST_TEST_MODULE core_tests
 
+#include <fstream>
+
 #include <boost/test/test_tools.hpp>
 #include <boost/test/unit_test.hpp>
 
 #include "core/cppwrapper.hpp"
+
 #include "nestest.hpp"
-#include <fstream>
 
 static void put_pixel(int x, int y, uint8_t z) {}
 static void cb_error_none(const char *format, ...) {}
@@ -62,7 +64,7 @@ BOOST_AUTO_TEST_CASE(memory_test) {
 
   /* TODO: check e_context contents and and check for buffer overflow
      and check that mappers and memory map etc. behave properly */
-  
+
   char e_context[LEN_E_CONTEXT];
   *e_context = '\0';
   ppu_s *ppu = nullptr;
@@ -72,7 +74,7 @@ BOOST_AUTO_TEST_CASE(memory_test) {
   ppu_init(&ppu, &put_pixel);
 
   /* -------------------------------------------------- */
-  
+
   /* neither callback registered */
   BOOST_CHECK(memory_init("nestest.nes", ppu, e_context) == -E_NO_CALLBACK);
 
@@ -85,10 +87,10 @@ BOOST_AUTO_TEST_CASE(memory_test) {
   memory_register_cb(&cb_memory_none, MEMORY_CB_WRITE);
   BOOST_CHECK(memory_init("nestest.nes", ppu, e_context) == -E_NO_CALLBACK);
   memory_unregister_cb(MEMORY_CB_WRITE);
-  
+
   memory_register_cb(&cb_memory_none, MEMORY_CB_WRITE);
   memory_register_cb(&cb_memory_none, MEMORY_CB_FETCH);
-  
+
   /* null ppu */
   BOOST_CHECK(memory_init("nestest.nes", NULL, e_context) == -E_NO_PPU);
 
@@ -99,7 +101,7 @@ BOOST_AUTO_TEST_CASE(memory_test) {
   BOOST_CHECK(memory_init("does_not_exist", ppu, e_context) == -E_OPEN_FILE);
 
   /* .nes file with mapper not yet implemented */
-  BOOST_CHECK(memory_init("mapper_6.nes", ppu, e_context) ==
+  BOOST_CHECK(memory_init("mapper_3.nes", ppu, e_context) ==
               -E_MAPPER_IMPLEMENTED);
 
   /* not a .nes file */
@@ -119,7 +121,7 @@ BOOST_AUTO_TEST_CASE(cpu_test) {
 
   char e_context[LEN_E_CONTEXT];
   *e_context = '\0';
-  
+
   ppu_register_state_callback(&cb_ppu_none);
   ppu_register_error_callback(&cb_error_none);
   memory_register_cb(&cb_memory_none, MEMORY_CB_WRITE);
@@ -132,14 +134,14 @@ BOOST_AUTO_TEST_CASE(cpu_test) {
   cpu_s *cpu = nullptr;
 
   /* == cpu_init() == */
-  
+
   /* neither callback registered */
   BOOST_CHECK(cpu_init(&cpu, 0) == -E_NO_CALLBACK);
   BOOST_CHECK(cpu_init(&cpu, 1) == -E_NO_CALLBACK);
 
   /* only cpu state callback registered */
   cpu_register_state_callback(&cb_cpu_none);
-  
+
   BOOST_CHECK(cpu_init(&cpu, 0) == -E_NO_CALLBACK);
   BOOST_CHECK(cpu_init(&cpu, 1) == -E_NO_CALLBACK);
 
@@ -156,7 +158,7 @@ BOOST_AUTO_TEST_CASE(cpu_test) {
   /* both callbacks registered */
   cpu_register_state_callback(&cb_cpu_none);
   cpu_register_error_callback(&cb_error_none);
-  
+
   BOOST_CHECK(cpu_init(&cpu, 0) == E_NO_ERROR);
   cpu_destroy(cpu);
 
@@ -167,13 +169,13 @@ BOOST_AUTO_TEST_CASE(cpu_test) {
 
   cpu_unregister_error_callback();
   cpu_unregister_state_callback();
-  
+
   BOOST_CHECK(cpu_exec(cpu, e_context) == -E_NO_CALLBACK);
 
   cpu_register_error_callback(&cb_error_none);
   BOOST_CHECK(cpu_exec(cpu, e_context) == -E_NO_CALLBACK);
   cpu_unregister_error_callback();
-  
+
   cpu_register_state_callback(&cb_cpu_none);
   BOOST_CHECK(cpu_exec(cpu, e_context) == -E_NO_CALLBACK);
   cpu_unregister_state_callback();
@@ -186,18 +188,9 @@ BOOST_AUTO_TEST_CASE(cpu_test) {
   cpu_destroy(cpu);
 }
 
-/* Runs nestest.nes and compares output with correct log nestest.log */
+
 BOOST_AUTO_TEST_CASE(nestest_test) {
-  std::ifstream neslog("nestest.log");
-  std::vector<std::string> neslog_lines;
-  std::string line;
-  while (getline(neslog, line)) {
-    neslog_lines.push_back(line);
-  }
-
-  std::vector<std::string> output_lines = nestest();
-
-  BOOST_TEST(output_lines == neslog_lines, boost::test_tools::per_element());
+  BOOST_TEST(nestest_actual() == nestest_log(), boost::test_tools::per_element());
 }
 
 BOOST_AUTO_TEST_SUITE_END()

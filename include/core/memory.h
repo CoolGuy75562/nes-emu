@@ -19,6 +19,7 @@
 
 #include "core/ppu.h"
 #include <stdint.h>
+#include <stdlib.h>
 
 typedef enum memory_cb_e { MEMORY_CB_WRITE, MEMORY_CB_FETCH } memory_cb_e;
 
@@ -28,7 +29,10 @@ void memory_register_cb(void (*memory_cb)(uint16_t, uint8_t),
 void memory_unregister_cb(memory_cb_e cb_type);
 
 /* initialises cpu memory and mapper according to
- * contents of .nes file rom_filename.
+ * contents of .nes file rom_filename. ppu is used for calling ppu functions.
+ *
+ * If rom_filename and ppu are both null, cpu memory is zeroed out
+ * and calls to memory_fetch and memory_write will not use a ppu
  *
  * Returns <0 if .nes file is invalid, error reading contents, etc.
  */
@@ -48,6 +52,7 @@ uint16_t memory_init_cpu_pc(void);
  * is set to 1
  *
  * fetch callback is called with addr and return value before return
+ *
  */
 uint8_t memory_fetch(uint16_t addr, uint8_t *to_nmi);
 
@@ -73,5 +78,11 @@ void ines_header_dump(void);
 
 /* hexdump cpu memory contents to file */
 void memory_dump(void);
+
+/* Initialises memory to addrs and vals */
+void memory_init_harte_test_case(const uint16_t *addrs, const uint8_t *vals, size_t length);
+
+/* sets list of addresses to 0 and sets vals to the values at the addresses*/
+void memory_reset_harte(const uint16_t *addrs, uint8_t *final_vals, size_t length);
 
 #endif
