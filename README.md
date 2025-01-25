@@ -7,12 +7,7 @@ CPU output is correct when running nestest.nes in automatic mode, and passes a s
 PPU is incomplete and memory has some issues, probably to do with mapper.
 
 ## Dependencies
-
-<<<<<<< HEAD
-Building and running this project currently requires CMake, CTest, the Boost.Test library, and unistd.h. unistd.h is only needed for getopt in src/app/main.cpp, and is only temporary until a proper frontend is implemented in Qt.
-=======
 Building and running this project currently requires CMake, CTest, Boost.Test, Qt5, and optionally RapidJSON to run the Tom Harte cpu tests (see below).
->>>>>>> gui
 
 ## Installation
 
