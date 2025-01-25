@@ -29,7 +29,7 @@ static void log_cpu_nestest(cpu_state_s *cpu_state, void *data);
 static void log_ppu_none(ppu_state_s *ppu_state, void *data) {}
 static void log_memory_none(uint16_t addr, uint8_t val, void *data) {}
 static void log_none(const char *, ...) {}
-static void put_pixel(int i, int j, uint8_t palette_idx) {}
+static void put_pixel(int i, int j, uint8_t palette_idx, void *data) {}
 
 std::vector<std::string> nestest_actual(void) {
 
@@ -49,7 +49,7 @@ std::vector<std::string> nestest_actual(void) {
   memory_register_cb(&log_memory_none, NULL, MEMORY_CB_WRITE);
 
 
-  nes_ppu_init(&ppu, &put_pixel);
+  nes_ppu_init(&ppu, &put_pixel, NULL);
   std::unique_ptr<ppu_s, void (*)(ppu_s *)> ppu_ptr(ppu, &ppu_destroy);
 
   nes_memory_init(rom_filename, ppu_ptr.get());

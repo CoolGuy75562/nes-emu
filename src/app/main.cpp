@@ -72,7 +72,7 @@ static void init(MainWindow &w) {
   
   try {
     qDebug() << "Initialising NESContext";
-    nes_context = new NESContext(rom_filename, &NESScreen::put_pixel, &w);
+    nes_context = new NESContext(rom_filename, s->get_put_pixel(), s, &w);
   } catch (NESError &e) {
     show_error(&w, e);
     exit(EXIT_FAILURE);

@@ -13,7 +13,7 @@ class NESContext : public QObject {
 
 public:
   
-  NESContext(const std::string &rom_filename, void (*put_pixel)(int, int, uint8_t), QObject *parent = nullptr);
+  NESContext(const std::string &rom_filename, void (*put_pixel)(int, int, uint8_t, void *), void *put_pixel_data, QObject *parent = nullptr);
   
 public slots:
   void nes_step(void);

@@ -1,16 +1,14 @@
 #include <QtDebug>
 #include "nescontext.h"
 
-static void put_pixel(int i, int j, uint8_t pallete_idx) {}
-
-NESContext::NESContext(const std::string &rom_filename, void (*put_pixel)(int, int, uint8_t), QObject *parent)
+NESContext::NESContext(const std::string &rom_filename, void (*put_pixel)(int, int, uint8_t, void *), void *put_pixel_data, QObject *parent)
     : QObject(parent), cpu_ptr(nullptr, &cpu_destroy),
       ppu_ptr(nullptr, &ppu_destroy) {
 
   /* init ppu_ptr */
   qDebug() << "NESContext: Initialising ppu";
   ppu_s *ppu = nullptr;
-  nes_ppu_init(&ppu, put_pixel);
+  nes_ppu_init(&ppu, put_pixel, put_pixel_data);
   ppu_ptr.reset(ppu);
 
   qDebug() << "NESContext: Initialising memory";

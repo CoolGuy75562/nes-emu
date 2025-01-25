@@ -40,7 +40,7 @@ private:
 };
 
 void nes_memory_init(const std::string &rom_filename, ppu_s *ppu);
-void nes_ppu_init(ppu_s **ppu, void (*put_pixel)(int, int, uint8_t));
+void nes_ppu_init(ppu_s **ppu, void (*put_pixel)(int, int, uint8_t, void *), void *);
 void nes_cpu_init(cpu_s **cpu, int nestest);
 int nes_cpu_exec(cpu_s *cpu);
 

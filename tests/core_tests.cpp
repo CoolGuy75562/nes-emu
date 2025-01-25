@@ -26,7 +26,7 @@
 
 #include "nestest.hpp"
 
-static void put_pixel(int x, int y, uint8_t z) {}
+static void put_pixel(int, int, uint8_t, void *) {}
 static void cb_error_none(const char *format, ...) {}
 static void cb_ppu_none(ppu_state_s *ppu_state, void *data) {}
 static void cb_cpu_none(cpu_state_s *cpu_state, void *data) {}
@@ -38,22 +38,22 @@ BOOST_AUTO_TEST_CASE(ppu_test) {
 
   ppu_s *ppu = nullptr;
   /* No callbacks registered */
-  BOOST_CHECK(ppu_init(&ppu, &put_pixel) == -E_NO_CALLBACK);
+  BOOST_CHECK(ppu_init(&ppu, &put_pixel, NULL) == -E_NO_CALLBACK);
 
   /* only error callback registered */
   ppu_register_error_callback(&cb_error_none);
-  BOOST_CHECK(ppu_init(&ppu, &put_pixel) == -E_NO_CALLBACK);
+  BOOST_CHECK(ppu_init(&ppu, &put_pixel, NULL) == -E_NO_CALLBACK);
   ppu_unregister_error_callback();
 
   /* only state callback registered */
   ppu_register_state_callback(&cb_ppu_none, NULL);
-  BOOST_CHECK(ppu_init(&ppu, &put_pixel) == -E_NO_CALLBACK);
+  BOOST_CHECK(ppu_init(&ppu, &put_pixel, NULL) == -E_NO_CALLBACK);
   ppu_unregister_state_callback();
 
   /* both callbacks now registered */
   ppu_register_state_callback(&cb_ppu_none, NULL);
   ppu_register_error_callback(&cb_error_none);
-  BOOST_CHECK(ppu_init(&ppu, &put_pixel) == E_NO_ERROR);
+  BOOST_CHECK(ppu_init(&ppu, &put_pixel, NULL) == E_NO_ERROR);
 
   ppu_destroy(ppu);
   ppu_unregister_state_callback();
@@ -71,7 +71,7 @@ BOOST_AUTO_TEST_CASE(memory_test) {
 
   ppu_register_state_callback(&cb_ppu_none, NULL);
   ppu_register_error_callback(&cb_error_none);
-  ppu_init(&ppu, &put_pixel);
+  ppu_init(&ppu, &put_pixel, NULL);
 
   /* -------------------------------------------------- */
 
@@ -127,7 +127,7 @@ BOOST_AUTO_TEST_CASE(cpu_test) {
   memory_register_cb(&cb_memory_none, NULL, MEMORY_CB_WRITE);
   memory_register_cb(&cb_memory_none, NULL, MEMORY_CB_FETCH);
   ppu_s *ppu = nullptr;
-  ppu_init(&ppu, &put_pixel);
+  ppu_init(&ppu, &put_pixel, NULL);
   memory_init("nestest.nes", ppu, e_context);
 
   /* -------------------------------------------------- */

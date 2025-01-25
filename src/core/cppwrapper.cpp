@@ -53,9 +53,9 @@ void nes_memory_init(const std::string &rom_filename, ppu_s *ppu) {
   }
 }
 		    
-void nes_ppu_init(ppu_s **ppu, void (*put_pixel)(int, int, uint8_t)) {
+void nes_ppu_init(ppu_s **ppu, void (*put_pixel)(int, int, uint8_t, void *), void *put_pixel_data) {
   int err;
-  if ((err = ppu_init(ppu, put_pixel)) < 0) {
+  if ((err = ppu_init(ppu, put_pixel, put_pixel_data)) < 0) {
     throw NESError(-err);
   }
 }

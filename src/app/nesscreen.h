@@ -17,8 +17,9 @@ class NESScreen : public QObject {
 public:
   NESScreen(QObject *parent = nullptr);
   std::array<uint8_t, nes_screen_size> *getPBufPtr();
-  static void put_pixel(int i, int j, uint8_t palette_idx);
-
+  friend void put_pixel(int i, int j, uint8_t palette_idx, void *data);
+  void (*get_put_pixel(void))(int, int, uint8_t, void *);
+    
 signals:
   void pbuf_full();
   

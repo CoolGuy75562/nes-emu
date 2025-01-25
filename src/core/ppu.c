@@ -140,7 +140,8 @@ static uint8_t memory_secondary_oam[32] = {0};
 static void (*log_error)(const char *, ...) = NULL;
 static void (*on_ppu_state_update)(ppu_state_s *ppu_state, void *data) = NULL;
 static void *on_ppu_state_update_data = NULL;
-static void (*put_pixel)(int i, int j, uint8_t palette_idx) = NULL;
+static void (*put_pixel)(int i, int j, uint8_t palette_idx, void *data) = NULL;
+static void *put_pixel_data = NULL;
 
 /*----------------------------------------------------------------------------*/
 void ppu_register_state_callback(void (*ppu_state_cb)(ppu_state_s *, void *),
@@ -157,8 +158,10 @@ void ppu_register_error_callback(void (*log_error_cb)(const char *, ...)) {
 
 void ppu_unregister_error_callback(void) { log_error = NULL; }
 
-int ppu_init(ppu_s **p, void (*put_pixel_cb)(int, int, uint8_t)) {
+int ppu_init(ppu_s **p, void (*put_pixel_cb)(int, int, uint8_t, void *),
+             void *data) {
   put_pixel = put_pixel_cb;
+  put_pixel_data = data;
   if (on_ppu_state_update == NULL || log_error == NULL) {
     return -E_NO_CALLBACK;
   }
@@ -517,7 +520,7 @@ static void render_pixel(ppu_s *ppu) {
                         (((ppu->ptt_high >> i) & 1) << 1) |
                         ((ppu->ptt_low >> i) & 1);
   uint8_t color_idx = memory_ppu[0x3F00 + palette_idx];
-  put_pixel(ppu->cycles, ppu->scanline, color_idx);
+  put_pixel(ppu->cycles, ppu->scanline, color_idx, put_pixel_data);
 }
 
 static void increment_ppu(ppu_s *ppu) {

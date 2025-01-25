@@ -63,7 +63,8 @@ void ppu_unregister_error_callback(void);
 /* allocate memory to and initialise ppu struct, and set function to
  * be used to plot pixels */
 int ppu_init(ppu_s **ppu,
-             void (*put_pixel_cb)(int i, int j, uint8_t palette_idx));
+             void (*put_pixel_cb)(int i, int j, uint8_t palette_idx, void *data),
+             void *put_pixel_data);
 
 /* deallocate memory allocated to ppu with ppu_init */
 void ppu_destroy(ppu_s *ppu);
