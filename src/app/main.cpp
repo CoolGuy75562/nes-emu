@@ -14,140 +14,82 @@
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include <QApplication>
+#include <QFileDialog>
+#include <QMainWindow>
+#include <QMessageBox>
+#include <QString>
+#include <QTimer>
+#include <QtDebug>
+
 #include <cstdio>
 #include <iostream>
 #include <memory>
+#include <string>
 
 #include "core/cppwrapper.hpp"
+#include "mainwindow.h"
+#include "nescontext.h"
+#include "nesscreen.h"
 
-extern "C" {
-#include <unistd.h>
-}
-
-static void print_usage(void);
-
-static void log_memory_fetch(uint16_t addr, uint8_t val);
-static void log_memory_write(uint16_t addr, uint8_t val);
-static void log_cpu_nestest(cpu_state_s *cpu_state);
-static void log_cpu(cpu_state_s *cpu_state);
-static void log_ppu(ppu_state_s *ppu_state);
-
-static void put_pixel(int i, int j, uint8_t pallete_idx) {}
 static void log_none(const char *format, ...) {}
-static void log_memory_none(uint16_t addr, uint8_t val) {}
-static void log_cpu_none(cpu_state_s *cpu_state) {}
-static void log_ppu_none(ppu_state_s *ppu_state) {}
+static void log_memory_none(uint16_t addr, uint8_t val, void *data) {}
+
+static void init(MainWindow &w);
 
 int main(int argc, char **argv) {
 
-  int opt, nestest = 0, ignore_cpu = 0, ignore_ppu = 0, ignore_memory = 0;
-  cpu_s *cpu = nullptr;
-  ppu_s *ppu = nullptr;
-  const char *rom_filename = NULL;
+  QApplication a(argc, argv);
+  MainWindow w;
+  /* for some reason I have to do this by hand or else
+   the programme keeps running after I close the window */
+  QObject::connect(&a, SIGNAL(lastWindowClosed()), &a, SLOT(quit()));
+  
+  init(w);
+  return a.exec();
+}
 
-  while ((opt = getopt(argc, argv, ":r:ncpm")) != -1) {
-    switch (opt) {
-    case 'r':
-      rom_filename = optarg;
-      break;
-    case 'n':
-      nestest = 1;
-      break;
-    case 'c':
-      ignore_cpu = 1;
-      break;
-    case 'p':
-      ignore_ppu = 1;
-      break;
-    case 'm':
-      ignore_memory = 1;
-      break;
-    case ':':
-      fprintf(stderr, "Option -%c requires an operand\n", optopt);
-      print_usage();
-      return EXIT_FAILURE;
-    case '?':
-      fprintf(stderr, "Unrecognised option -%c\n", optopt);
-      print_usage();
-      return EXIT_FAILURE;
-    }
-  }
 
-  if (ignore_cpu) {
-    cpu_register_state_callback(&log_cpu_none);
-  } else if (nestest) {
-    cpu_register_state_callback(&log_cpu_nestest);
-  } else {
-    cpu_register_state_callback(&log_cpu);
-  }
+static void init(MainWindow &w) {
+  qDebug() << "Initialising MainWindow";
+  NESContext *nes_context;
+  w.show();
 
-  if (nestest || ignore_ppu) {
-    ppu_register_state_callback(&log_ppu_none);
-  } else {
-    ppu_register_state_callback(&log_ppu);
-  }
+  const std::string rom_filename =
+      QFileDialog::getOpenFileName(&w, "Open File", "/home", "NES ROM (*.nes)")
+          .toStdString();
 
-  if (nestest || ignore_memory) {
-    memory_register_cb(&log_memory_none, MEMORY_CB_FETCH);
-    memory_register_cb(&log_memory_none, MEMORY_CB_WRITE);
-  } else {
-    memory_register_cb(&log_memory_fetch, MEMORY_CB_FETCH);
-    memory_register_cb(&log_memory_write, MEMORY_CB_WRITE);
-  }
-
-  /* Error callbacks don't do much right now */
+  /* for now */
   cpu_register_error_callback(&log_none);
   ppu_register_error_callback(&log_none);
+  memory_register_cb(&log_memory_none, NULL, MEMORY_CB_FETCH);
+  memory_register_cb(&log_memory_none, NULL, MEMORY_CB_WRITE);
+
+  /* ew ? */
+  qDebug() << "Initialising NESScreen";
+  NESScreen *s = new NESScreen(&w);
+  w.initOpenGLWidgetNESScreen(s);
   
   try {
-    nes_ppu_init(&ppu, &put_pixel);
-    std::unique_ptr<ppu_s, void (*)(ppu_s *)> ppu_ptr(ppu, &ppu_destroy);
-
-    nes_memory_init(rom_filename, ppu_ptr.get());
-
-    nes_cpu_init(&cpu, nestest);
-    std::unique_ptr<cpu_s, void (*)(cpu_s *)> cpu_ptr(cpu, &cpu_destroy);
-
-    /* begin the main loop */
-    nes_cpu_exec(cpu_ptr.get());
-
+    qDebug() << "Initialising NESContext";
+    nes_context = new NESContext(rom_filename, &NESScreen::put_pixel, &w);
   } catch (NESError &e) {
-    std::cout << e.what() << std::endl;
-    return EXIT_FAILURE;
+    show_error(&w, e);
+    exit(EXIT_FAILURE);
   }
 
-  return EXIT_SUCCESS;
-}
-
-static void print_usage(void) { std::cout << "usage" << std::endl; }
-
-static void log_memory_fetch(uint16_t addr, uint8_t val) {
-  std::printf("[MEM] Fetched val %02x from addr %04x\n", val, addr);
-}
-
-static void log_memory_write(uint16_t addr, uint8_t val) {
-  std::printf("[MEM] Wrote val %02x to addr %04x\n", val, addr);
-}
-
-static void log_cpu_nestest(cpu_state_s *cpu_state) {
-  static int line_num = 1;
-  std::printf("%d %04x %02x %s %02x %02x %02x %02x %02x %d\n", line_num++,
-              cpu_state->pc, cpu_state->opc, cpu_state->curr_instruction,
-              cpu_state->a, cpu_state->x, cpu_state->y, cpu_state->p,
-              cpu_state->sp, cpu_state->cycles);
-}
-
-static void log_cpu(cpu_state_s *cpu_state) {
-  std::printf("[CPU] PC=%04x OPC=%02x %s (%s) A=%02x X=%02x Y=%02x P=%02x "
-              "SP=%02x CYC=%d\n",
-              cpu_state->pc, cpu_state->opc, cpu_state->curr_instruction,
-              cpu_state->curr_addr_mode, cpu_state->a, cpu_state->x,
-              cpu_state->y, cpu_state->p, cpu_state->sp, cpu_state->cycles);
-}
-
-static void log_ppu(ppu_state_s *ppu_state) {
-  std::printf("[PPU] CYC=%d SCL=%d v=%04x t=%04x x=%02x w=%d\n",
-              ppu_state->cycles, ppu_state->scanline, ppu_state->v,
-              ppu_state->t, ppu_state->x, ppu_state->w);
-}
+  /*========================Signals and Slots===========================*/
   
+  /* when nes execution is done */
+  QObject::connect(nes_context, SIGNAL(nes_done()), &w, SLOT(done()));
+
+  QObject::connect(nes_context, SIGNAL(nes_error(NESError &)), &w,
+                   SLOT(error(NESError &)));
+
+  QTimer *timer = new QTimer(&w);
+  QObject::connect(timer, SIGNAL(timeout()), nes_context, SLOT(nes_step()));
+  QObject::connect(&w, SIGNAL(play_button_clicked()), timer, SLOT(start()));
+  QObject::connect(&w, SIGNAL(pause_button_clicked()), timer, SLOT(stop()));
+
+  qDebug() << "Init done";
+}

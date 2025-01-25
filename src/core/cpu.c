@@ -16,6 +16,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "core/cpu.h"
 #include "core/errors.h"
@@ -407,11 +408,9 @@ static uint16_t (*addr_mode_handlers[])(cpu_s *) = {ADDRESS_MODE_LIST};
 /* Helper functions */
 static inline void stack_push(cpu_s *cpu, uint8_t val);
 static inline uint8_t stack_pop(cpu_s *cpu);
-static inline void dummy_fetch(cpu_s *cpu);
 static inline uint8_t fetch8(cpu_s *cpu, uint16_t addr);
 static inline uint16_t fetch16(cpu_s *cpu, uint16_t addr);
 static inline void write8(cpu_s *cpu, uint16_t addr, uint8_t val);
-static inline void write16(cpu_s *cpu, uint16_t addr, uint16_t val);
 
 /* Instructions */
 static void ORA(cpu_s *cpu, addr_mode_e mode);
@@ -482,7 +481,9 @@ static void SRE(cpu_s *cpu, addr_mode_e mode);
 static void RRA(cpu_s *cpu, addr_mode_e mode);
 
 static inline void update_flags(cpu_s *cpu);
-static void (*on_cpu_state_update)(cpu_state_s *) = NULL;
+static void (*on_cpu_state_update)(cpu_state_s *, void *) = NULL;
+static void *on_cpu_state_update_data = NULL;
+
 static void (*log_error)(const char *, ...) = NULL;
 static cpu_state_s cpu_state;
 
@@ -509,12 +510,33 @@ static void update_cpu_state(cpu_s *cpu) {
  * =============================================================================
  */
 
-void cpu_register_state_callback(void (*cpu_state_cb)(cpu_state_s *)) {
+void cpu_register_state_callback(void (*cpu_state_cb)(cpu_state_s *, void *),
+                                 void *cpu_cb_data) {
   on_cpu_state_update = cpu_state_cb;
+  on_cpu_state_update_data = cpu_cb_data;
 }
+
+void cpu_unregister_state_callback(void) {
+  on_cpu_state_update = NULL;
+  on_cpu_state_update_data = NULL;
+}
+
 
 void cpu_register_error_callback(void (*log_error_cb)(const char *, ...)) {
   log_error = log_error_cb;
+}
+
+void cpu_unregister_error_callback(void) { log_error = NULL; }
+
+void cpu_init_harte_test_case(cpu_s *cpu, cpu_state_s *test_case) {
+  memset(cpu, 0, sizeof(cpu_s));
+  cpu->pc = test_case->pc;
+  cpu->a = test_case->a;
+  cpu->x = test_case->x;
+  cpu->y = test_case->y;
+  cpu->sp = test_case->sp;
+  cpu->flags = test_case->p;
+  update_cpu_state(cpu);
 }
 
 int cpu_init(cpu_s **p_cpu, uint8_t nestest) {
@@ -527,31 +549,24 @@ int cpu_init(cpu_s **p_cpu, uint8_t nestest) {
   }
 
   cpu_s *cpu = *p_cpu;
+  cpu->a = 0;
+  cpu->x = 0;
+  cpu->y = 0;
+  cpu->sp = 0xFD;
+  cpu->flags = FLAG_UNUSED | FLAG_INT_DISABLE;
+  cpu->to_oamdma = 0;
+  cpu->to_update_flags = 0;
+  cpu->to_irq = 0;
+  cpu->to_nmi = 0;
+  
   if (!nestest) {
-    cpu->a = 0;
-    cpu->x = 0;
-    cpu->y = 0;
-    cpu->sp = 0xFD;
-    cpu->flags = FLAG_UNUSED | FLAG_INT_DISABLE;
     cpu->pc = memory_init_cpu_pc(); /* PC = ($FFFC) */
     cpu->cycles = 2;
-    cpu->to_oamdma = 0;
-    cpu->to_update_flags = 0;
-    cpu->to_irq = 0;
-    cpu->to_nmi = 0;
     JMP(cpu, ABS);
   } else {
-    cpu->a = 0;
-    cpu->x = 0;
-    cpu->y = 0;
-    cpu->sp = 0xFD;
-    cpu->flags = FLAG_UNUSED | FLAG_INT_DISABLE;
     cpu->pc = 0xC000;
     cpu->cycles = 7;
-    cpu->to_oamdma = 0;
-    cpu->to_update_flags = 0;
-    cpu->to_irq = 0;
-    cpu->to_nmi = 0;
+
   }
   SET_INSTRUCTION(JMP, 0x40 + JMP_OFFSET, ABS);
   update_cpu_state(cpu);
@@ -564,9 +579,17 @@ void cpu_destroy(cpu_s *cpu) { free(cpu); }
  * TODO: Proper interrupt handling
  */
 int cpu_exec(cpu_s *cpu, char *e_context) {
+  if (on_cpu_state_update == NULL || log_error == NULL) {
+    return -E_NO_CALLBACK;
+  }
+  
+  #ifndef DOING_HARTE_TESTS
   update_cpu_state(cpu);
   update_flags(cpu);
+  #endif
+  
   uint8_t opc = fetch8(cpu, cpu->pc++); /* 1 cycle */
+  
   if (cpu->to_nmi) {
     NMI();
   }
@@ -651,7 +674,11 @@ int cpu_exec(cpu_s *cpu, char *e_context) {
     sprintf(e_context, "%02x", opc);
     return -E_ILLEGAL_OPC;
   }
-  on_cpu_state_update(&cpu_state);
+  #ifdef DOING_HARTE_TESTS
+  update_flags(cpu);
+  update_cpu_state(cpu);
+  #endif
+  on_cpu_state_update(&cpu_state, on_cpu_state_update_data);
   return 1;
 }
 
@@ -660,17 +687,27 @@ int cpu_exec(cpu_s *cpu, char *e_context) {
  *==============================================================================
  */
 
+/* update interupt disable flag which has a delay */
 static inline void update_flags(cpu_s *cpu) {
-  /* there is a one instruction delay to update interrupt disable flag */
+
+#ifdef DOING_HARTE_TESTS
+  /* harte tests seem to update flags immediately, even though
+   * nes wiki says that there is a one instruction delay to
+   * update the interrupt disable flag.
+   */
+  if (cpu->to_update_flags > 0) {
+    cpu->flags = (cpu->flags & MASK_I) | cpu->new_int_disable_flag;
+    cpu->to_update_flags = 0;
+  }
+#else
   if (cpu->to_update_flags == 2) {
     cpu->to_update_flags--;
   } else if (cpu->to_update_flags == 1) {
     cpu->flags = (cpu->flags & MASK_I) | cpu->new_int_disable_flag;
     cpu->to_update_flags = 0;
   }
+#endif
 }
-
-static inline void dummy_fetch(cpu_s *cpu) { fetch8(cpu, cpu->pc); }
 
 static inline uint8_t fetch8(cpu_s *cpu, uint16_t addr) {
   cpu->cycles++;
@@ -686,16 +723,12 @@ static inline uint16_t fetch16(cpu_s *cpu, uint16_t addr) {
 static inline void write8(cpu_s *cpu, uint16_t addr, uint8_t val) {
   memory_write(addr, val, &(cpu->to_oamdma), &(cpu->to_nmi));
   cpu->cycles++;
-
+  /*
   if (cpu->to_oamdma) {
     memory_do_oamdma(val, &(cpu->cycles), &(cpu->to_nmi));
     cpu->to_oamdma = 0;
   }
-}
-
-static inline void write16(cpu_s *cpu, uint16_t addr, uint16_t val) {
-  write8(cpu, addr, val & 0xFF);
-  write8(cpu, addr + 1, (val & 0xFF00) >> 8);
+  */
 }
 
 static inline void stack_push(cpu_s *cpu, uint8_t val) {
@@ -711,12 +744,6 @@ static inline uint8_t stack_pop(cpu_s *cpu) {
 /* =============================================================================
  *                              ADDRESSING MODE HANDLERS
  * =============================================================================
- */
-
-/* TODO: For now a dummy fetch just adds an extra cycle and does not do any
- * fetching. There are also places where a dummy fetch should be a dummy write.
- * This will need to be addressed so that anything memory mapped like the PPU
- * works properly.
  */
 
 /* For addressing modes absolute_x, absolute_y, and indirect_indexed which
@@ -744,7 +771,7 @@ static inline uint16_t zero_page(cpu_s *cpu) {
  */
 static inline uint16_t zero_page_x(cpu_s *cpu) {
   uint8_t addr = fetch8(cpu, cpu->pc++);
-  dummy_fetch(cpu);
+  fetch8(cpu, addr);
   addr += cpu->x;
   return (uint16_t)addr;
 }
@@ -754,7 +781,7 @@ static inline uint16_t zero_page_x(cpu_s *cpu) {
  */
 static inline uint16_t zero_page_y(cpu_s *cpu) {
   uint8_t addr = fetch8(cpu, cpu->pc++);
-  dummy_fetch(cpu);
+  fetch8(cpu, addr);
   addr += cpu->y;
   return (uint16_t)addr;
 }
@@ -775,7 +802,7 @@ static inline uint16_t absolute_x(cpu_s *cpu) {
   uint8_t a_low = fetch8(cpu, cpu->pc++);
   uint8_t a_high = fetch8(cpu, cpu->pc++);
   if (((a_low + cpu->x) & 0xFF) < cpu->x) { /* i.e. we lost the high bit */
-    dummy_fetch(cpu);
+    fetch8(cpu, (a_high << 8) | ((a_low + cpu->x) & 0xFF));
   }
   return (uint16_t)(a_low | (a_high << 8)) + cpu->x;
 }
@@ -784,8 +811,9 @@ static inline uint16_t absolute_x(cpu_s *cpu) {
  * PC += 2
  */
 static inline uint16_t absolute_x_extra_cycle(cpu_s *cpu) {
-  dummy_fetch(cpu);
-  return absolute(cpu) + cpu->x;
+  uint16_t addr = absolute(cpu);
+  fetch8(cpu, (addr & 0xFF00) | ((addr + cpu->x) & 0xFF));
+  return addr + cpu->x;
 }
 
 /* Cycles = 2 (+1)
@@ -795,7 +823,7 @@ static inline uint16_t absolute_y(cpu_s *cpu) {
   uint8_t a_low = fetch8(cpu, cpu->pc++);
   uint8_t a_high = fetch8(cpu, cpu->pc++);
   if (((a_low + cpu->y) & 0xFF) < cpu->y) { /* i.e. we lost the high bit */
-    dummy_fetch(cpu);
+    fetch8(cpu, (a_high << 8) | ((a_low + cpu->y) & 0xFF));
   }
   return (uint16_t)(a_low | (a_high << 8)) + cpu->y;
 }
@@ -804,8 +832,9 @@ static inline uint16_t absolute_y(cpu_s *cpu) {
  * PC += 2
  */
 static inline uint16_t absolute_y_extra_cycle(cpu_s *cpu) {
-  dummy_fetch(cpu);
-  return absolute(cpu) + cpu->y;
+  uint16_t addr = absolute(cpu);
+  fetch8(cpu, (addr & 0xFF00) | ((addr + cpu->y) & 0xFF));
+  return addr + cpu->y;
 }
 
 /* AKA IND_X
@@ -814,9 +843,15 @@ static inline uint16_t absolute_y_extra_cycle(cpu_s *cpu) {
  * PC += 1
  */
 static inline uint16_t indexed_indirect(cpu_s *cpu) {
-  uint16_t idx_low = (zero_page(cpu) + cpu->x) & 0xFF;
+  uint16_t zp_addr = zero_page(cpu);
+  /* this conflicts with another document that says that the dummy read
+   * is at PC + 1, but the Harte tests say otherwise. Plus said document is
+   * about 65x02 which is maybe slightly different even though I read that
+   * cycle stuff is supposed to be the same
+   */
+  fetch8(cpu, zp_addr); 
+  uint16_t idx_low = (zp_addr + cpu->x) & 0xFF;
   uint16_t idx_high = (idx_low + 1) & 0xFF;
-  dummy_fetch(cpu);
   return fetch8(cpu, idx_low) | (fetch8(cpu, idx_high) << 8);
 }
 
@@ -831,7 +866,7 @@ static inline uint16_t indirect_indexed(cpu_s *cpu) {
   uint8_t a_high = fetch8(cpu, idx);
   uint16_t addr = (a_low | (a_high << 8));
   if (((a_low + cpu->y) & 0xFF) < cpu->y) {
-    dummy_fetch(cpu);
+    fetch8(cpu, (a_high << 8) | ((a_low + cpu->y) & 0xFF));
   }
   return addr + cpu->y;
 }
@@ -842,10 +877,11 @@ static inline uint16_t indirect_indexed(cpu_s *cpu) {
  * PC += 1
  */
 static inline uint16_t indirect_indexed_extra_cycle(cpu_s *cpu) {
-  dummy_fetch(cpu);
   uint16_t idx_low = zero_page(cpu);
   uint16_t idx_high = (idx_low + 1) & 0xFF;
-  return (fetch8(cpu, idx_low) | fetch8(cpu, idx_high) << 8) + cpu->y;
+  uint16_t addr = (fetch8(cpu, idx_low) | fetch8(cpu, idx_high) << 8);
+  fetch8(cpu, (addr & 0xFF00) | ((addr + cpu->y) & 0xFF));
+  return addr + cpu->y;
 }
 
 static inline uint16_t absolute_indirect(cpu_s *cpu) {
@@ -900,7 +936,7 @@ static void NOP(cpu_s *cpu, addr_mode_e mode) {
  */
 static void ADC(cpu_s *cpu, addr_mode_e mode) {
   uint8_t m = fetch8(cpu, addr_mode_handlers[mode](cpu));
-  uint8_t oper = m + (cpu->flags & FLAG_CARRY);
+  uint16_t oper = m + (cpu->flags & FLAG_CARRY);
   uint16_t res = cpu->a + oper;
   uint8_t trunc_res = res & 0xFF;
   cpu->flags = (cpu->flags & MASK_NVZC) | ((res != trunc_res) << CARRY_SHIFT) |
@@ -1178,8 +1214,9 @@ static inline void branch_flag_clear(cpu_s *cpu, addr_mode_e mode,
     fetch8(cpu, cpu->pc); /* dummy fetch pc + 2 */
     uint16_t page = cpu->pc & 0xFF00;
     cpu->pc += (int8_t)offset;
+
     if (page != (cpu->pc & 0xFF00)) {
-      fetch8(cpu, cpu->pc); /* dummy fetch pc + 2 + offset */
+      fetch8(cpu, page | (cpu->pc & 0xFF)); /* dummy fetch pc + 2 + offset (before cross) */
     }
   }
 }
@@ -1191,7 +1228,7 @@ static inline void branch_flag_set(cpu_s *cpu, addr_mode_e mode, uint8_t flag) {
     uint16_t page = cpu->pc & 0xFF00;
     cpu->pc += (int8_t)offset;
     if (page != (cpu->pc & 0xFF00)) {
-      fetch8(cpu, cpu->pc); /* dummy fetch pc + 2 + offset */
+      fetch8(cpu, page | (cpu->pc & 0xFF)); /* dummy fetch pc + 2 + offset (before cross) */
     }
   }
 }
@@ -1415,18 +1452,22 @@ static void JMP(cpu_s *cpu, addr_mode_e mode) {
 }
 
 static void JSR(cpu_s *cpu, addr_mode_e mode) {
-  fetch8(cpu, cpu->sp | (1 << 8)); /* dummy fetch stack here? */
+  /* Note that the addressing mode is hardcoded into this instruction */
+  uint8_t pc_low = fetch8(cpu, cpu->pc);
+  fetch8(cpu, cpu->sp | (1 << 8)); /* dummy fetch stack */
   stack_push(cpu, ((cpu->pc + 1) & 0xFF00) >> 8);
   stack_push(cpu, (cpu->pc + 1) & 0xFF);
-  cpu->pc = addr_mode_handlers[mode](cpu);
+  uint8_t pc_high = fetch8(cpu, ++cpu->pc);
+  cpu->pc++;
+  cpu->pc = (pc_low | (pc_high << 8));
 }
 
 static void RTS(cpu_s *cpu, addr_mode_e mode) {
   fetch8(cpu, cpu->pc); /* 2x dummy fetch pc + 1 */
-  fetch8(cpu, cpu->pc);
+  fetch8(cpu, (1 << 8) | cpu->sp);
   uint8_t pc_low = stack_pop(cpu);
   uint8_t pc_high = stack_pop(cpu);
-  fetch8(cpu, cpu->sp | (1 << 8)); /* dummy fetch sp + 2 */
+  fetch8(cpu, pc_low | (pc_high << 8));
   cpu->pc = (pc_low | pc_high << 8) + 1;
 }
 
@@ -1434,15 +1475,19 @@ static void BRK(cpu_s *cpu, addr_mode_e mode) {
   fetch8(cpu, cpu->pc); /* dummy fetch pc + 1 */
   stack_push(cpu, ((cpu->pc + 1) & 0xFF00) >> 8);
   stack_push(cpu, (cpu->pc + 1) & 0xFF);
-  stack_push(cpu, (cpu->flags & MASK_NVDIZC) | FLAG_BREAK | FLAG_UNUSED);
+  stack_push(cpu, (cpu->flags & ~MASK_NVDIZC) | FLAG_BREAK | FLAG_UNUSED);
   cpu->flags = (cpu->flags & MASK_I) | FLAG_INT_DISABLE;
   cpu->pc = fetch16(cpu, 0xFFFE);
 }
 
 static void RTI(cpu_s *cpu, addr_mode_e mode) {
   fetch8(cpu, cpu->pc); /* 2x dummy fetch pc + 1 */
-  fetch8(cpu, cpu->pc);
+  fetch8(cpu, (1 << 8) | cpu->sp); /* dummy fetch stack ? */
   cpu->flags = (cpu->flags & MASK_NVDIZC) | stack_pop(cpu);
+  /* harte tests require break "flag" not set */
+  #ifdef DOING_HARTE_TESTS
+  cpu->flags &= ~FLAG_BREAK;
+  #endif
   uint8_t pc_low = stack_pop(cpu);
   uint8_t pc_high = stack_pop(cpu);
   cpu->pc = (pc_low | pc_high << 8);
@@ -1464,7 +1509,7 @@ static void PHP(cpu_s *cpu, addr_mode_e mode) {
 /* Flags: N+ V 1 B D I Z+ C */
 static void PLA(cpu_s *cpu, addr_mode_e mode) {
   fetch8(cpu, cpu->pc);                       /* dummy fetch pc + 1 */
-  fetch8(cpu, addr_mode_handlers[mode](cpu)); /* dummy fetch pc + 1 */
+  fetch8(cpu, (1 << 8) | cpu->sp);
   cpu->a = stack_pop(cpu);
   cpu->flags = (cpu->flags & MASK_NZ) | (!cpu->a << ZERO_SHIFT) |
                (NEGATIVE(cpu->a) << NEGATIVE_SHIFT);
@@ -1472,8 +1517,8 @@ static void PLA(cpu_s *cpu, addr_mode_e mode) {
 
 /* Flags: N+ V+ 1 1 D+ I (+1) Z+ C+ */
 static void PLP(cpu_s *cpu, addr_mode_e mode) {
-  fetch8(cpu, cpu->pc);                       /* dummy fetch pc + 1 */
-  fetch8(cpu, addr_mode_handlers[mode](cpu)); /* dummy fetch pc + 1 */
+  fetch8(cpu, cpu->pc); /* dummy fetch pc + 1 */
+  fetch8(cpu, (1 << 8) | cpu->sp); /* dummy fetch stack */
   uint8_t flags = stack_pop(cpu);
   cpu->to_update_flags = 2;
   cpu->new_int_disable_flag = flags & FLAG_INT_DISABLE;

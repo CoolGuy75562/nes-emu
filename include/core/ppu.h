@@ -45,11 +45,20 @@ typedef struct ppu_state_s {
   uint8_t (*memory_secondary_oam)[32];
 } ppu_state_s;
 
+/* Do not call cpu_exec() after unregistering a callback! */
+
+/* TODO: error propagation from ppu->memory->cpu so cpu_exec() can
+ * return -E_NO_CALLBACK when this happens
+ */
+
 /* register callback for register state update */
-void ppu_register_state_callback(void (*ppu_state_cb)(ppu_state_s *));
+void ppu_register_state_callback(void (*ppu_state_cb)(ppu_state_s *, void *),
+                                 void *data);
+void ppu_unregister_state_callback(void);
 
 /* register callback for error logging */
 void ppu_register_error_callback(void (*log_error_cb)(const char *, ...));
+void ppu_unregister_error_callback(void);
 
 /* allocate memory to and initialise ppu struct, and set function to
  * be used to plot pixels */

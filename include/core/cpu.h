@@ -37,9 +37,14 @@ typedef struct cpu_state_s {
 typedef struct cpu_s cpu_s;
 
 /* called with current cpu state after each instruction (for now) */
-void cpu_register_state_callback(void (*cpu_state_cb)(cpu_state_s *));
+void cpu_register_state_callback(void (*cpu_state_cb)(cpu_state_s *, void *),
+                                 void *cpu_cb_data);
+
+void cpu_unregister_state_callback(void);
+
 /* called when error e.g. illegal opcode */
 void cpu_register_error_callback(void (*log_error_cb)(const char *, ...));
+void cpu_unregister_error_callback(void);
 
 /* allocate memory to opaque pointer cpu_s * and initialise cpu
 *
@@ -55,5 +60,11 @@ void cpu_destroy(cpu_s *);
  * Return value < 0 if error
  */
 int cpu_exec(cpu_s *, char *e_context);
+
+/* Resets cpu and sets cpu values to values in cpu_state
+ *
+ * Used for each harte test case
+ */
+void cpu_init_harte_test_case(cpu_s *cpu, cpu_state_s *cpu_state);
 
 #endif

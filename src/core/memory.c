@@ -82,17 +82,35 @@ static ines_header_s header_data;
 /* better to do this than callback in main or
  * passing ppu to cpu to memory: */
 static ppu_s *ppu;
-static void (*on_fetch)(uint16_t addr, uint8_t val) = NULL;
-static void (*on_write)(uint16_t addr, uint8_t val) = NULL;
+static void (*on_fetch)(uint16_t addr, uint8_t val, void *) = NULL;
+static void *on_fetch_data = NULL;
+static void (*on_write)(uint16_t addr, uint8_t val, void *) = NULL;
+static void *on_write_data = NULL;
 
-void memory_register_cb(void (*memory_cb)(uint16_t, uint8_t),
+void memory_register_cb(void (*memory_cb)(uint16_t, uint8_t, void *),
+			void *data,
                         memory_cb_e cb_type) {
   switch (cb_type) {
   case MEMORY_CB_FETCH:
     on_fetch = memory_cb;
+    on_fetch_data = data;
     break;
   case MEMORY_CB_WRITE:
     on_write = memory_cb;
+    on_write_data = data;
+    break;
+  }
+}
+
+void memory_unregister_cb(memory_cb_e cb_type) {
+  switch (cb_type) {
+  case MEMORY_CB_FETCH:
+    on_fetch = NULL;
+    on_fetch_data = NULL;
+    break;
+  case MEMORY_CB_WRITE:
+    on_write = NULL;
+    on_write_data = NULL;
     break;
   }
 }
@@ -101,18 +119,23 @@ int memory_init(const char *filename, ppu_s *p, char *e_context) {
   if (on_fetch == NULL || on_write == NULL) {
     return -E_NO_CALLBACK;
   }
-  if (p == NULL) {
+
+  if (filename == NULL && p == NULL) { /* no ppu mode for testing cpu */
+    ppu = p;
+    //memset(memory_cpu, 0, sizeof(memory_cpu));
+    return E_NO_ERROR;
+  } else if (p == NULL) {
     return -E_NO_PPU;
+  } else if (filename == NULL) {
+    return -E_NO_FILE;
   }
+
   FILE *fp;
   char ines_header_bytes[16];
   int err;
 
   ppu = p;
 
-  if (filename == NULL) {
-    return -E_NO_FILE;
-  }
   if ((fp = fopen(filename, "rb")) == NULL) {
     strncpy(e_context, filename, LEN_E_CONTEXT - 1);
     return -E_OPEN_FILE;
@@ -219,63 +242,93 @@ void memory_do_oamdma(uint8_t val, uint16_t *cycles, uint8_t *to_nmi) {
 
 uint8_t memory_fetch(uint16_t addr, uint8_t *to_nmi) {
   uint8_t val;
-  if (addr < 0x2000) {
-    val = memory_cpu[addr % 0x800];
-    on_fetch(addr % 0x800, val);
-  }
-
-  else if (addr < 0x4000) {
-    val = ppu_register_fetch(ppu, (addr - 0x2000) % 8);
-    on_fetch(0x2000 + (addr - 0x2000) % 8, val);
-  }
-
-  else if (addr < 0x4018) {
+  uint16_t effective_addr;
+  if (ppu == NULL) { /* no ppu mode */
     val = memory_cpu[addr];
-    on_fetch(addr, val);
-  }
+    effective_addr = addr;
 
-  else {
-    val = memory_cpu[addr];
-    on_fetch(addr, val);
-  }
+  } else {
+    if (addr < 0x2000) {
+      val = memory_cpu[addr % 0x800];
+      effective_addr = addr % 0x800;
+    }
 
-  do_three_ppu_steps(to_nmi);
+    else if (addr < 0x4000) {
+      val = ppu_register_fetch(ppu, (addr - 0x2000) % 8);
+      effective_addr = 0x2000 + (addr - 0x2000) % 8;
+    }
+
+    else if (addr < 0x4018) {
+      val = memory_cpu[addr];
+      effective_addr = addr;
+    }
+
+    else {
+      val = memory_cpu[addr];
+      effective_addr = addr;
+    }
+
+    do_three_ppu_steps(to_nmi);
+  }
+  on_fetch(effective_addr, val, on_fetch_data);
   return val;
 }
 
 void memory_write(uint16_t addr, uint8_t val, uint8_t *to_oamdma,
                   uint8_t *to_nmi) {
 
-  if (addr < 0x2000) {
-    // memory_cpu[addr] = val;
-    memory_cpu[addr % 0x800] = val; /* mirroring */
-    on_write(addr % 0x800, val);
-  }
+  uint16_t effective_addr;
+  if (ppu == NULL) { /* no ppu mode */
+    memory_cpu[addr] = val;
+    effective_addr = addr;
 
-  else if (addr < 0x4000) {
-    ppu_register_write(ppu, (addr - 0x2000) % 8, val);
-    on_write(0x2000 + (addr - 0x2000) % 8, val);
-  }
-
-  else if (addr < 0x4018) {
-    if (addr == 0x4014) { /* OAMDMA */
-      *to_oamdma = 1;
+  } else {
+    if (addr < 0x2000) {
+      // memory_cpu[addr] = val;
+      memory_cpu[addr % 0x800] = val; /* mirroring */
+      effective_addr = addr % 0x800;
     }
-    memory_cpu[addr] = val;
-    on_write(addr, val);
-  }
 
-  else if (addr < 0x4020) {
-    memory_cpu[addr] = val;
-    on_write(addr, val);
-  }
+    else if (addr < 0x4000) {
+      ppu_register_write(ppu, (addr - 0x2000) % 8, val);
+      effective_addr = 0x2000 + (addr - 0x2000) % 8;
+    }
 
-  else {
-    memory_cpu[addr] = val;
-    on_write(addr, val);
-  }
+    else if (addr < 0x4018) {
+      if (addr == 0x4014) { /* OAMDMA */
+        *to_oamdma = 1;
+      }
+      memory_cpu[addr] = val;
+      effective_addr = addr;
+    }
 
-  do_three_ppu_steps(to_nmi);
+    else if (addr < 0x4020) {
+      memory_cpu[addr] = val;
+      effective_addr = addr;
+    }
+
+    else {
+      memory_cpu[addr] = val;
+      effective_addr = addr;
+    }
+
+    do_three_ppu_steps(to_nmi);
+  }
+  on_write(effective_addr, val, on_write_data);
+}
+
+void memory_init_harte_test_case(const uint16_t *addrs, const uint8_t *vals,
+                                 size_t length) {
+  memset(memory_cpu, 0, sizeof(memory_cpu));
+  for (size_t i = 0; i < length; i++) {
+    memory_cpu[addrs[i]] = vals[i];
+  }
+}
+
+void memory_reset_harte(const uint16_t *addrs, uint8_t *final_vals, size_t length) {
+  for (size_t i = 0; i < length; i++) {
+    final_vals[i] = memory_cpu[addrs[i]];
+  }
 }
 
 static int parse_ines_header(char ines_header[16], ines_header_s *header_data,

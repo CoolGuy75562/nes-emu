@@ -138,23 +138,28 @@ static uint8_t memory_ppu[0x4000] = {0};
 static uint8_t memory_oam[0x100] = {0};
 static uint8_t memory_secondary_oam[32] = {0};
 static void (*log_error)(const char *, ...) = NULL;
-static void (*on_ppu_state_update)(ppu_state_s *ppu_state) = NULL;
+static void (*on_ppu_state_update)(ppu_state_s *ppu_state, void *data) = NULL;
+static void *on_ppu_state_update_data = NULL;
 static void (*put_pixel)(int i, int j, uint8_t palette_idx) = NULL;
-static uint8_t to_def_log_error = 1, to_def_on_ppu_state_update = 1;
+
 /*----------------------------------------------------------------------------*/
-void ppu_register_state_callback(void (*ppu_state_cb)(ppu_state_s *)) {
+void ppu_register_state_callback(void (*ppu_state_cb)(ppu_state_s *, void *),
+                                 void *data) {
   on_ppu_state_update = ppu_state_cb;
-  to_def_on_ppu_state_update = 0;
+  on_ppu_state_update_data = data;
 }
+
+void ppu_unregister_state_callback(void) { on_ppu_state_update = NULL; }
 
 void ppu_register_error_callback(void (*log_error_cb)(const char *, ...)) {
   log_error = log_error_cb;
-  to_def_log_error = 0;
 }
+
+void ppu_unregister_error_callback(void) { log_error = NULL; }
 
 int ppu_init(ppu_s **p, void (*put_pixel_cb)(int, int, uint8_t)) {
   put_pixel = put_pixel_cb;
-  if (to_def_log_error || to_def_on_ppu_state_update) {
+  if (on_ppu_state_update == NULL || log_error == NULL) {
     return -E_NO_CALLBACK;
   }
   if ((*p = calloc(1, sizeof(ppu_s))) == NULL) {
@@ -164,7 +169,7 @@ int ppu_init(ppu_s **p, void (*put_pixel_cb)(int, int, uint8_t)) {
   ppu->ppustatus = 0xA0;
 
   state_init(ppu);
-  on_ppu_state_update(&ppu_state);
+  on_ppu_state_update(&ppu_state, on_ppu_state_update_data);
   return E_NO_ERROR;
 }
 
@@ -181,7 +186,7 @@ void ppu_step(ppu_s *ppu) {
   ppu->total_cycles++;
   
   state_update(ppu);
-  on_ppu_state_update(&ppu_state);
+  on_ppu_state_update(&ppu_state, on_ppu_state_update_data);
 }
 
 uint8_t ppu_check_nmi(ppu_s *ppu) {
