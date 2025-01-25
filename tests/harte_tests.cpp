@@ -38,6 +38,8 @@ BOOST_AUTO_TEST_CASE(harte_test) {
 
       harte_case hc_actual;
       std::vector<uint8_t> vals_actual;
+      cpu_state_s cpu_state_actual;
+      hc_actual.cpu_state = &cpu_state_actual;
       hc_actual.vals = &vals_actual;
       
       if (!harte.do_next_harte_case(hc_expected, hc_actual, cycles_expected,

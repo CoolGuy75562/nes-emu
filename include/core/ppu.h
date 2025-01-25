@@ -52,7 +52,8 @@ typedef struct ppu_state_s {
  */
 
 /* register callback for register state update */
-void ppu_register_state_callback(void (*ppu_state_cb)(ppu_state_s *));
+void ppu_register_state_callback(void (*ppu_state_cb)(ppu_state_s *, void *),
+                                 void *data);
 void ppu_unregister_state_callback(void);
 
 /* register callback for error logging */

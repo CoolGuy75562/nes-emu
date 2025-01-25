@@ -481,7 +481,9 @@ static void SRE(cpu_s *cpu, addr_mode_e mode);
 static void RRA(cpu_s *cpu, addr_mode_e mode);
 
 static inline void update_flags(cpu_s *cpu);
-static void (*on_cpu_state_update)(cpu_state_s *) = NULL;
+static void (*on_cpu_state_update)(cpu_state_s *, void *) = NULL;
+static void *on_cpu_state_update_data = NULL;
+
 static void (*log_error)(const char *, ...) = NULL;
 static cpu_state_s cpu_state;
 
@@ -508,11 +510,16 @@ static void update_cpu_state(cpu_s *cpu) {
  * =============================================================================
  */
 
-void cpu_register_state_callback(void (*cpu_state_cb)(cpu_state_s *)) {
+void cpu_register_state_callback(void (*cpu_state_cb)(cpu_state_s *, void *),
+                                 void *cpu_cb_data) {
   on_cpu_state_update = cpu_state_cb;
+  on_cpu_state_update_data = cpu_cb_data;
 }
 
-void cpu_unregister_state_callback(void) { on_cpu_state_update = NULL; }
+void cpu_unregister_state_callback(void) {
+  on_cpu_state_update = NULL;
+  on_cpu_state_update_data = NULL;
+}
 
 
 void cpu_register_error_callback(void (*log_error_cb)(const char *, ...)) {
@@ -671,7 +678,7 @@ int cpu_exec(cpu_s *cpu, char *e_context) {
   update_flags(cpu);
   update_cpu_state(cpu);
   #endif
-  on_cpu_state_update(&cpu_state);
+  on_cpu_state_update(&cpu_state, on_cpu_state_update_data);
   return 1;
 }
 

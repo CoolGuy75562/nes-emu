@@ -6,11 +6,21 @@
 #include "ui_mainwindow.h"
 #include "nesscreen.h"
 
-static MainWindow *w; // not ideal
-
 void show_error(QWidget *parent, NESError &e) {
   std::cout << e.what() << std::endl;
   QMessageBox::critical(parent, "Error", e.what());
+}
+
+void on_cpu_state_update(cpu_state_s *cpu_state, void *window_instance) {
+  static MainWindow *win;
+  win = static_cast<MainWindow *>(window_instance);
+  win->cpu_state = cpu_state;
+}
+
+void on_ppu_state_update(ppu_state_s *ppu_state, void *window_instance) {
+  static MainWindow *win;
+  win = static_cast<MainWindow *>(window_instance);
+  win->ppu_state = ppu_state;
 }
 
 const QStringList MainWindow::ppu_labels = {"Cycles:",
@@ -41,6 +51,10 @@ MainWindow::MainWindow(QWidget *parent)
   /* until I can get headers to work with QTableView this
    * will have to do...
    */
+
+  cpu_register_state_callback(&on_cpu_state_update, this);
+  ppu_register_state_callback(&on_ppu_state_update, this);
+  
   ui->cpuStateTableWidget->setRowCount(10);
   ui->cpuStateTableWidget->setColumnCount(1);
   ui->cpuStateTableWidget->setVerticalHeaderLabels(cpu_labels);
@@ -55,8 +69,6 @@ MainWindow::MainWindow(QWidget *parent)
       0, QHeaderView::Stretch);
   ui->ppuStateTableWidget->horizontalHeader()->hide();
 
-  w = this;
-
   QTimer *timer = new QTimer(this);
   connect(timer, SIGNAL(timeout()), this, SLOT(refresh_cpu_state()));
   connect(timer, SIGNAL(timeout()), this, SLOT(refresh_ppu_state()));
@@ -67,16 +79,6 @@ MainWindow::~MainWindow() { delete ui; }
 
 void MainWindow::initOpenGLWidgetNESScreen(NESScreen *s) {
   ui->openGLWidget->initScreen(s);
-}
-/* this is a hack to pass a member function as a C-style callback */
-void MainWindow::static_on_cpu_state_update(cpu_state_s *cpu_state) {
-  // w->on_cpu_state_update(cpu_state);
-  w->cpu_state = cpu_state;
-}
-
-void MainWindow::static_on_ppu_state_update(ppu_state_s *ppu_state) {
-  //  w->on_ppu_state_update(ppu_state);
-  w->ppu_state = ppu_state;
 }
 
 void MainWindow::refresh_cpu_state() {

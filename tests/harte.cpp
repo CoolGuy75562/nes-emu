@@ -4,14 +4,13 @@
 
 #include "harte.hpp"
 
-static void write_cycle(uint16_t addr, uint8_t val);
-static void fetch_cycle(uint16_t addr, uint8_t val);
-static void update_cpu_state(cpu_state_s *state);
+static void write_cycle(uint16_t addr, uint8_t val, void *data);
+static void fetch_cycle(uint16_t addr, uint8_t val, void *data);
+static void update_cpu_state(cpu_state_s *state, void* data);
 static void error_none(const char *, ...) {}
-static void memory_cb_none(uint16_t addr, uint8_t val) {}
+static void cpu_cb_none(cpu_state_s *, void *) {}
+static void memory_cb_none(uint16_t addr, uint8_t val, void* data) {}
 
-static std::vector<cycle> *case_cycles;
-static cpu_state_s *actual_state;
 static char e_context[LEN_E_CONTEXT];
 
 /* This seems a bit silly */
@@ -31,11 +30,11 @@ std::ostream &operator<<(std::ostream &os, const cycle &cyc) {
 }
 
 
-Harte::Harte(rapidjson::Document &document) : document(document), cpu_ptr(nullptr, &cpu_destroy) {
+Harte::Harte(rapidjson::Document &document) : cpu_ptr(nullptr, &cpu_destroy), document(document) {
 
-  memory_register_cb(&memory_cb_none, MEMORY_CB_WRITE);
-  memory_register_cb(&memory_cb_none, MEMORY_CB_FETCH);
-  cpu_register_state_callback(&update_cpu_state);
+  memory_register_cb(&memory_cb_none, NULL, MEMORY_CB_WRITE);
+  memory_register_cb(&memory_cb_none, NULL, MEMORY_CB_FETCH);
+  cpu_register_state_callback(&cpu_cb_none, NULL);
   cpu_register_error_callback(&error_none);
 
   memory_init(NULL, NULL, e_context);
@@ -64,8 +63,9 @@ bool Harte::init_harte_test(int test_id) {
  * to have a list of valid opcodes somewhere.
  */
 bool Harte::is_valid_opcode(int test_id) {
-  memory_register_cb(&memory_cb_none, MEMORY_CB_FETCH);
-  memory_register_cb(&memory_cb_none, MEMORY_CB_WRITE);
+  cpu_register_state_callback(&cpu_cb_none, NULL);
+  memory_register_cb(&memory_cb_none, NULL, MEMORY_CB_FETCH);
+  memory_register_cb(&memory_cb_none, NULL, MEMORY_CB_WRITE);
   cpu_state_s state = {.pc = 0,
                        .cycles = 0,
                        .a = 0,
@@ -140,11 +140,11 @@ bool Harte::do_next_harte_case(harte_case &hc_expected, harte_case &hc_actual,
 
   /* init cycles */
   init_cycles_expected(curr_case, cycles_expected);
-  case_cycles = &cycles_actual;
   
-  memory_register_cb(&fetch_cycle, MEMORY_CB_FETCH);
-  memory_register_cb(&write_cycle, MEMORY_CB_WRITE);
-
+  memory_register_cb(&fetch_cycle, &cycles_actual, MEMORY_CB_FETCH);
+  memory_register_cb(&write_cycle, &cycles_actual, MEMORY_CB_WRITE);
+  cpu_register_state_callback(&update_cpu_state, &hc_actual);
+  
   /* now ready to do the case */
   memory_init_harte_test_case(hc_initial.addrs->data(), hc_initial.vals->data(),
                               hc_initial.vals->size());
@@ -152,9 +152,11 @@ bool Harte::do_next_harte_case(harte_case &hc_expected, harte_case &hc_actual,
 
   cpu_exec(cpu_ptr.get(), e_context);
 
-  hc_actual.cpu_state = actual_state;
   memory_reset_harte(hc_actual.addrs->data(), hc_actual.vals->data(),
                      hc_actual.vals->size());
+  cpu_unregister_state_callback();
+  memory_unregister_cb(MEMORY_CB_FETCH);
+  memory_unregister_cb(MEMORY_CB_WRITE);
   return true;
 }
 
@@ -195,12 +197,19 @@ void Harte::init_harte_struct(const rapidjson::Value &curr_case,
   }
 }
 
-static void write_cycle(uint16_t addr, uint8_t val) {
-  case_cycles->push_back(cycle(addr, val, 'w'));
+static void write_cycle(uint16_t addr, uint8_t val, void *data) {
+  static std::vector<cycle> *cycles;
+  cycles = static_cast<std::vector<cycle> *>(data);
+  cycles->push_back(cycle(addr, val, 'w'));
 }
 
-static void fetch_cycle(uint16_t addr, uint8_t val) {
-  case_cycles->push_back(cycle(addr, val, 'r'));
+static void fetch_cycle(uint16_t addr, uint8_t val, void *data) {
+  static std::vector<cycle> *cycles;
+  cycles = static_cast<std::vector<cycle> *>(data);
+  cycles->push_back(cycle(addr, val, 'r'));
 }
 
-static void update_cpu_state(cpu_state_s *state) { actual_state = state; }
+static void update_cpu_state(cpu_state_s *state, void *data) {
+  harte_case *hc_actual = static_cast<harte_case *>(data);
+  hc_actual->cpu_state = state;
+}

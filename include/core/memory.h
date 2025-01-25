@@ -24,7 +24,8 @@
 typedef enum memory_cb_e { MEMORY_CB_WRITE, MEMORY_CB_FETCH } memory_cb_e;
 
 /* register callback for memory_fetch or memory_write */
-void memory_register_cb(void (*memory_cb)(uint16_t, uint8_t),
+void memory_register_cb(void (*memory_cb)(uint16_t, uint8_t, void *),
+			void *data,
                         memory_cb_e cb_type);
 void memory_unregister_cb(memory_cb_e cb_type);
 

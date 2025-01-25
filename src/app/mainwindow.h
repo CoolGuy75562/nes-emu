@@ -21,8 +21,10 @@ public:
 
   void initOpenGLWidgetNESScreen(NESScreen *s);
   
-  static void static_on_cpu_state_update(cpu_state_s *cpu_state);
-  static void static_on_ppu_state_update(ppu_state_s *ppu_state);
+  friend void on_cpu_state_update(cpu_state_s *cpu_state,
+                                  void *window_instance);
+  friend void on_ppu_state_update(ppu_state_s *ppu_state,
+                                  void *window_instance);
 
 public slots:
   void done(void);

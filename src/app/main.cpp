@@ -32,19 +32,10 @@
 #include "nescontext.h"
 #include "nesscreen.h"
 
-static void log_memory_fetch(uint16_t addr, uint8_t val);
-static void log_memory_write(uint16_t addr, uint8_t val);
-static void log_cpu_nestest(cpu_state_s *cpu_state);
-static void log_cpu(cpu_state_s *cpu_state);
-static void log_ppu(ppu_state_s *ppu_state);
-
 static void log_none(const char *format, ...) {}
-static void log_memory_none(uint16_t addr, uint8_t val) {}
-static void log_cpu_none(cpu_state_s *cpu_state) {}
-static void log_ppu_none(ppu_state_s *ppu_state) {}
+static void log_memory_none(uint16_t addr, uint8_t val, void *data) {}
 
 static void init(MainWindow &w);
-
 
 int main(int argc, char **argv) {
 
@@ -71,18 +62,12 @@ static void init(MainWindow &w) {
   /* for now */
   cpu_register_error_callback(&log_none);
   ppu_register_error_callback(&log_none);
-  memory_register_cb(&log_memory_none, MEMORY_CB_FETCH);
-  memory_register_cb(&log_memory_none, MEMORY_CB_WRITE);
+  memory_register_cb(&log_memory_none, NULL, MEMORY_CB_FETCH);
+  memory_register_cb(&log_memory_none, NULL, MEMORY_CB_WRITE);
 
-  /* MainWindow shouldn't really be dealing with this,
-     hopefully I can get QTableView to work at some point */
-
-  cpu_register_state_callback(&MainWindow::static_on_cpu_state_update);
-  ppu_register_state_callback(&MainWindow::static_on_ppu_state_update);
-  
   /* ew ? */
+  qDebug() << "Initialising NESScreen";
   NESScreen *s = new NESScreen(&w);
-  qDebug() << "setOpenGLWidgetNESScreen(s)";
   w.initOpenGLWidgetNESScreen(s);
   
   try {
@@ -93,7 +78,7 @@ static void init(MainWindow &w) {
     exit(EXIT_FAILURE);
   }
 
-  
+  /*========================Signals and Slots===========================*/
   
   /* when nes execution is done */
   QObject::connect(nes_context, SIGNAL(nes_done()), &w, SLOT(done()));
@@ -107,39 +92,4 @@ static void init(MainWindow &w) {
   QObject::connect(&w, SIGNAL(pause_button_clicked()), timer, SLOT(stop()));
 
   qDebug() << "Init done";
-}
-
-
-static void log_memory_fetch(uint16_t addr, uint8_t val) {
-  std::printf("[MEM] Fetched val %02x from addr %04x\n", val, addr);
-}
-
-
-static void log_memory_write(uint16_t addr, uint8_t val) {
-  std::printf("[MEM] Wrote val %02x to addr %04x\n", val, addr);
-}
-
-
-static void log_cpu_nestest(cpu_state_s *cpu_state) {
-  static int line_num = 1;
-  std::printf("%d %04x %02x %s %02x %02x %02x %02x %02x %d\n", line_num++,
-              cpu_state->pc, cpu_state->opc, cpu_state->curr_instruction,
-              cpu_state->a, cpu_state->x, cpu_state->y, cpu_state->p,
-              cpu_state->sp, cpu_state->cycles);
-}
-
-
-static void log_cpu(cpu_state_s *cpu_state) {
-  std::printf("[CPU] PC=%04x OPC=%02x %s (%s) A=%02x X=%02x Y=%02x P=%02x "
-              "SP=%02x CYC=%d\n",
-              cpu_state->pc, cpu_state->opc, cpu_state->curr_instruction,
-              cpu_state->curr_addr_mode, cpu_state->a, cpu_state->x,
-              cpu_state->y, cpu_state->p, cpu_state->sp, cpu_state->cycles);
-}
-
-
-static void log_ppu(ppu_state_s *ppu_state) {
-  std::printf("[PPU] CYC=%d SCL=%d v=%04x t=%04x x=%02x w=%d\n",
-              ppu_state->cycles, ppu_state->scanline, ppu_state->v,
-              ppu_state->t, ppu_state->x, ppu_state->w);
 }
