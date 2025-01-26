@@ -18,6 +18,7 @@
 #define PPU_H_
 
 #include <stdint.h>
+#include <stdlib.h>
 
 typedef struct ppu_s ppu_s;
 
@@ -59,6 +60,8 @@ void ppu_unregister_state_callback(void);
 /* register callback for error logging */
 void ppu_register_error_callback(void (*log_error_cb)(const char *, ...));
 void ppu_unregister_error_callback(void);
+
+void ppu_init_chr_rom(const uint8_t *chr_rom, size_t chr_rom_size);
 
 /* allocate memory to and initialise ppu struct, and set function to
  * be used to plot pixels */

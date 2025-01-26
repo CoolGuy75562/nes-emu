@@ -158,6 +158,10 @@ void ppu_register_error_callback(void (*log_error_cb)(const char *, ...)) {
 
 void ppu_unregister_error_callback(void) { log_error = NULL; }
 
+void ppu_init_chr_rom(const uint8_t *chr_rom, size_t chr_rom_size) {
+  memcpy(memory_ppu, chr_rom, chr_rom_size);
+}
+
 int ppu_init(ppu_s **p, void (*put_pixel_cb)(int, int, uint8_t, void *),
              void *data) {
   put_pixel = put_pixel_cb;

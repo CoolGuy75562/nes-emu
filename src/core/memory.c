@@ -46,7 +46,7 @@ typedef struct ines_header_s {
 
 static int parse_ines_header(char ines_header[16], ines_header_s *header_data,
                              char *e_context);
-static int mapper_0(ines_header_s *header_data, FILE *fp, char *e_context);
+static int init_mapper_0(ines_header_s *header_data, FILE *fp, char *e_context);
 static void do_three_ppu_steps(uint8_t *to_nmi);
 
 /* ======= Memory Layout =======
@@ -156,7 +156,7 @@ int memory_init(const char *filename, ppu_s *p, char *e_context) {
 
   switch (header_data.mapper_n) {
   case 0:
-    err = mapper_0(&header_data, fp, e_context);
+    err = init_mapper_0(&header_data, fp, e_context);
     break;
   default:
     err = -E_MAPPER_IMPLEMENTED;
@@ -365,7 +365,7 @@ static int parse_ines_header(char ines_header[16], ines_header_s *header_data,
   return E_NO_ERROR;
 }
 
-static int mapper_0(ines_header_s *header_data, FILE *fp, char *e_context) {
+static int init_mapper_0(ines_header_s *header_data, FILE *fp, char *e_context) {
 
   if (header_data->chr_rom_size != 1) {
     sprintf(e_context, "%d", header_data->chr_rom_size);
@@ -386,6 +386,17 @@ static int mapper_0(ines_header_s *header_data, FILE *fp, char *e_context) {
     memcpy(memory_cpu + 0xC000, memory_cpu + 0x8000, 0x4000);
   }
 
+  if (ppu != NULL) {
+
+    uint8_t chr_rom[0x2000];
+
+    if (fread(chr_rom, sizeof(uint8_t), 0x2000 * header_data->chr_rom_size,
+              fp) < 0x2000 * header_data->chr_rom_size) {
+      return -E_READ_FILE;
+    }
+
+    ppu_init_chr_rom(chr_rom, 0x2000 * header_data->chr_rom_size);
+  }
   return E_NO_ERROR;
 }
 
