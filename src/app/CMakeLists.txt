@@ -27,4 +27,5 @@ set_target_properties(nes-emu
 target_link_libraries(nes-emu
     core
     Qt5::Widgets
+    #asan
 )

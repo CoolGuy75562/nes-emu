@@ -8,6 +8,8 @@ const auto nes_screen_width = 256;
 const auto nes_screen_height =  240;
 const auto nes_screen_size =  nes_screen_width * nes_screen_height * 3;
 
+extern "C" void put_pixel();
+
 #define PALETTE_SIZE 64
 
 class NESScreen : public QObject {

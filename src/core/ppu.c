@@ -401,7 +401,7 @@ static void ppuaddr_write(ppu_s *ppu, uint8_t val) {
 }
 
 static void ppudata_write(ppu_s *ppu, uint8_t val) {
-  memory_ppu[ppu->v] = val;
+  memory_ppu[ppu->v & MASK_T_V_ADDR_ALL] = val;
   ppu->v += (ppu->ppuctrl & MASK_PPUCTRL_INCREMENT) ? 32 : 1;
   ppu->v &= MASK_T_V_SCROLL_ALL;
 }

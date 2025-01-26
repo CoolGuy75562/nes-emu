@@ -1,7 +1,6 @@
 cmake_minimum_required(VERSION 3.5)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-set (CMAKE_BUILD TYPE Debug)
 
 if (EXISTS ${CMAKE_SOURCE_DIR}/harte_tests_dir_path.txt) 
     file(STRINGS harte_tests_dir_path.txt HARTE_TESTS_PATH)
@@ -13,6 +12,7 @@ endif()
 
 add_compile_options("-g")
 add_compile_options("-Wall")
+#add_compile_options("-fsanitize=address")
 
 project (nes-emu)
 add_subdirectory(src)

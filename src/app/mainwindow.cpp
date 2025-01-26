@@ -6,21 +6,20 @@
 #include "ui_mainwindow.h"
 #include "nesscreen.h"
 
+
 void show_error(QWidget *parent, NESError &e) {
   std::cout << e.what() << std::endl;
   QMessageBox::critical(parent, "Error", e.what());
 }
 
-void on_cpu_state_update(cpu_state_s *cpu_state, void *window_instance) {
-  static MainWindow *win;
-  win = static_cast<MainWindow *>(window_instance);
-  win->cpu_state = cpu_state;
+void on_cpu_state_update(cpu_state_s *state, void *window) {
+  MainWindow *win = static_cast<MainWindow *>(window);
+  win->cpu_state = state;
 }
 
-void on_ppu_state_update(ppu_state_s *ppu_state, void *window_instance) {
-  static MainWindow *win;
-  win = static_cast<MainWindow *>(window_instance);
-  win->ppu_state = ppu_state;
+void on_ppu_state_update(ppu_state_s *state, void *window) {
+  MainWindow *win = static_cast<MainWindow *>(window);
+  win->ppu_state = state;
 }
 
 const QStringList MainWindow::ppu_labels = {"Cycles:",
@@ -72,7 +71,7 @@ MainWindow::MainWindow(QWidget *parent)
   QTimer *timer = new QTimer(this);
   connect(timer, SIGNAL(timeout()), this, SLOT(refresh_cpu_state()));
   connect(timer, SIGNAL(timeout()), this, SLOT(refresh_ppu_state()));
-  timer->start(32);
+  timer->start(1000);
 }
 
 MainWindow::~MainWindow() { delete ui; }
@@ -81,6 +80,7 @@ void MainWindow::initOpenGLWidgetNESScreen(NESScreen *s) {
   ui->openGLWidget->initScreen(s);
 }
 
+/* terrible */
 void MainWindow::refresh_cpu_state() {
   if (cpu_state == nullptr) {
     return;

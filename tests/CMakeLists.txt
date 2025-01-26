@@ -32,6 +32,7 @@ if(DEFINED HARTE_TESTS_PATH)
         core_harte
 	harte
 	Boost::unit_test_framework
+	#asan
     )
     target_compile_definitions(harte_tests
         PRIVATE
@@ -44,6 +45,7 @@ endif()
 add_library(nestest nestest.cpp)
 
 target_link_libraries(nestest core)
+#target_link_libraries(nestest asan)
 
 add_executable(core_tests core_tests.cpp)
 
@@ -51,6 +53,7 @@ target_link_libraries(core_tests
     core
     nestest
     Boost::unit_test_framework
+    #asan
 )
 
 target_compile_definitions(core_tests

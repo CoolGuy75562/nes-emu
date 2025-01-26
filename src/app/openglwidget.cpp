@@ -3,8 +3,6 @@
 
 #include "openglwidget.h"
 
-static uint8_t test_pbuf[nes_screen_size];
-
 static const GLfloat vertices[] = {-1.0, -1.0, 0.0, 0.0, 0.0, 1.0, -1.0, 0.0, 1.0, 0.0,
                                    -1.0, 1.0,  0.0, 1.0, 1.0, 1.0, 1.0,  0.0, 0.0, 1.0};
 
@@ -12,6 +10,7 @@ OpenGLWidget::OpenGLWidget(QWidget *parent) : QOpenGLWidget(parent) {
   QTimer *timer = new QTimer(this);
   connect(timer, SIGNAL(timeout()), this, SLOT(draw_pbuf()));
   timer->start(32); // should be ~30fps
+  pbuf_ptr = nullptr;
 }
 
 OpenGLWidget::~OpenGLWidget() {
@@ -25,7 +24,8 @@ OpenGLWidget::~OpenGLWidget() {
 
 void OpenGLWidget::initScreen(NESScreen *s) {
   pbuf_ptr = s->getPBufPtr();
-  // connect(s, SIGNAL(pbuf_full()), this, SLOT(draw_pbuf()));
+  Q_ASSERT(pbuf_ptr != nullptr);
+  //connect(s, SIGNAL(pbuf_full()), this, SLOT(draw_pbuf()));
 }
 
 void OpenGLWidget::draw_pbuf() {
@@ -53,8 +53,9 @@ void OpenGLWidget::paintGL() {
   GLuint texture_id;
   glGenTextures(1, &texture_id);
   glBindTexture(GL_TEXTURE_2D, texture_id);
+  Q_ASSERT(pbuf_ptr != nullptr);
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, nes_screen_width, nes_screen_height,
-               0, GL_RGB, GL_UNSIGNED_BYTE, &(*pbuf_ptr)[0]);
+               0, GL_RGB, GL_UNSIGNED_BYTE, pbuf_ptr->data());
   glGenerateMipmap(GL_TEXTURE_2D);
   
   glEnable(GL_TEXTURE_2D);

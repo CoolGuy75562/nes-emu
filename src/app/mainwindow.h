@@ -7,6 +7,11 @@
 
 void show_error(QWidget *parent, NESError &e);
 
+extern "C" {
+void on_cpu_state_update();
+void on_ppu_state_update();
+}
+
 namespace Ui {
 class MainWindow;
 }
@@ -20,11 +25,8 @@ public:
   ~MainWindow();
 
   void initOpenGLWidgetNESScreen(NESScreen *s);
-  
-  friend void on_cpu_state_update(cpu_state_s *cpu_state,
-                                  void *window_instance);
-  friend void on_ppu_state_update(ppu_state_s *ppu_state,
-                                  void *window_instance);
+  friend void on_cpu_state_update(cpu_state_s *state, void *window);
+  friend void on_ppu_state_update(ppu_state_s *state, void *window);
 
 public slots:
   void done(void);
