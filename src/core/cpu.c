@@ -364,6 +364,7 @@ typedef struct cpu_s {
   uint8_t to_oamdma;
   uint16_t cycles;
   uint8_t to_nmi;
+  uint8_t in_nmi;
   uint8_t to_irq;
 } cpu_s;
 
@@ -490,8 +491,16 @@ static cpu_state_s cpu_state;
 // uint16_t (*addr_mode_handlers[])(void)
 
 /* These will be interrupt handlers, more research needed */
-static void NMI(void) {}
-static void IRQ(void) {}
+static void NMI(cpu_s *cpu) {
+  cpu->to_nmi = 0;
+  cpu->in_nmi = 1;
+
+  fetch8(cpu, cpu->pc); /* no pc increment */
+  SET_INSTRUCTION(BRK, BRK_OPC, IMP);
+  BRK(cpu, IMP);
+  cpu->in_nmi = 0;
+}
+//static void IRQ(cpu_s *cpu) {}
 
 static void update_cpu_state(cpu_s *cpu);
 
@@ -521,7 +530,6 @@ void cpu_unregister_state_callback(void) {
   on_cpu_state_update_data = NULL;
 }
 
-
 void cpu_register_error_callback(void (*log_error_cb)(const char *, ...)) {
   log_error = log_error_cb;
 }
@@ -543,7 +551,7 @@ int cpu_init(cpu_s **p_cpu, uint8_t nestest) {
   if (on_cpu_state_update == NULL || log_error == NULL) {
     return -E_NO_CALLBACK;
   }
-  
+
   if (((*p_cpu) = malloc(sizeof(cpu_s))) == NULL) {
     return -E_MALLOC;
   }
@@ -558,6 +566,7 @@ int cpu_init(cpu_s **p_cpu, uint8_t nestest) {
   cpu->to_update_flags = 0;
   cpu->to_irq = 0;
   cpu->to_nmi = 0;
+  cpu->in_nmi = 0;
   
   if (!nestest) {
     cpu->pc = memory_init_cpu_pc(); /* PC = ($FFFC) */
@@ -566,7 +575,6 @@ int cpu_init(cpu_s **p_cpu, uint8_t nestest) {
   } else {
     cpu->pc = 0xC000;
     cpu->cycles = 7;
-
   }
   SET_INSTRUCTION(JMP, 0x40 + JMP_OFFSET, ABS);
   update_cpu_state(cpu);
@@ -582,102 +590,102 @@ int cpu_exec(cpu_s *cpu, char *e_context) {
   if (on_cpu_state_update == NULL || log_error == NULL) {
     return -E_NO_CALLBACK;
   }
-  
-  #ifndef DOING_HARTE_TESTS
+
+#ifndef DOING_HARTE_TESTS
   update_cpu_state(cpu);
   update_flags(cpu);
-  #endif
-  
-  uint8_t opc = fetch8(cpu, cpu->pc++); /* 1 cycle */
-  
+#endif
+
   if (cpu->to_nmi) {
-    NMI();
+    NMI(cpu);
   }
-  if (cpu->to_irq) {
-    IRQ();
+  /*
+  else if (cpu->to_irq) {
+    IRQ(cpu);
   }
-  switch (opc) {
+  */
+  else {
+    uint8_t opc = fetch8(cpu, cpu->pc++); /* 1 cycle */
+    switch (opc) {
 
-    /* Grouped by "sections" in opcode table: */
+      /* Grouped by "sections" in opcode table: */
 
-    /* Mostly ALU instructions */
-    IS_ALU_OPC(ORA)
-    IS_ALU_OPC(AND)
-    IS_ALU_OPC(EOR)
-    IS_ALU_OPC(ADC)
-    IS_ALU_OPC(LDA)
-    IS_ALU_OPC(CMP)
-    IS_ALU_OPC(SBC)
-    IS_STA()
+      /* Mostly ALU instructions */
+      IS_ALU_OPC(ORA)
+      IS_ALU_OPC(AND)
+      IS_ALU_OPC(EOR)
+      IS_ALU_OPC(ADC)
+      IS_ALU_OPC(LDA)
+      IS_ALU_OPC(CMP)
+      IS_ALU_OPC(SBC)
+      IS_STA()
 
-    /* Mostly RMW (read-modify-write) instructions */
-    IS_RMW_OPC(ASL)
-    IS_RMW_OPC(ROL)
-    IS_RMW_OPC(LSR)
-    IS_RMW_OPC(ROR)
-    IS_INC_DEC(DEC)
-    IS_INC_DEC(INC)
-    IS_STX()
-    IS_LDX()
-    IS_OPC(TXA)
-    IS_OPC(TXS)
-    IS_OPC(TAX)
-    IS_OPC(TSX)
-    IS_OPC(DEX)
-    IS_OPC(NOP)
+      /* Mostly RMW (read-modify-write) instructions */
+      IS_RMW_OPC(ASL)
+      IS_RMW_OPC(ROL)
+      IS_RMW_OPC(LSR)
+      IS_RMW_OPC(ROR)
+      IS_INC_DEC(DEC)
+      IS_INC_DEC(INC)
+      IS_STX()
+      IS_LDX()
+      IS_OPC(TXA)
+      IS_OPC(TXS)
+      IS_OPC(TAX)
+      IS_OPC(TSX)
+      IS_OPC(DEX)
+      IS_OPC(NOP)
 
-    /* Control instructions, and unique instructions */
-    IS_BRANCH_OPC()
-    IS_OPC(BRK)
-    IS_OPC(PHP)
-    IS_OPC(CLC)
-    IS_OPC(PLP)
-    IS_OPC(SEC)
-    IS_OPC(RTI)
-    IS_OPC(PHA)
-    IS_OPC(CLI)
-    IS_OPC(RTS)
-    IS_OPC(PLA)
-    IS_OPC(SEI)
-    IS_OPC(DEY)
-    IS_OPC(TYA)
-    IS_OPC(TAY)
-    IS_OPC(CLV)
-    IS_OPC(INY)
-    IS_OPC(CLD)
-    IS_OPC(INX)
-    IS_OPC(SED)
-    IS_JMP()
-    IS_JSR()
-    IS_BIT()
-    IS_LDY()
-    IS_STY()
-    IS_CPX_CPY(CPX)
-    IS_CPX_CPY(CPY)
+      /* Control instructions, and unique instructions */
+      IS_BRANCH_OPC()
+      IS_OPC(BRK)
+      IS_OPC(PHP)
+      IS_OPC(CLC)
+      IS_OPC(PLP)
+      IS_OPC(SEC)
+      IS_OPC(RTI)
+      IS_OPC(PHA)
+      IS_OPC(CLI)
+      IS_OPC(RTS)
+      IS_OPC(PLA)
+      IS_OPC(SEI)
+      IS_OPC(DEY)
+      IS_OPC(TYA)
+      IS_OPC(TAY)
+      IS_OPC(CLV)
+      IS_OPC(INY)
+      IS_OPC(CLD)
+      IS_OPC(INX)
+      IS_OPC(SED)
+      IS_JMP()
+      IS_JSR()
+      IS_BIT()
+      IS_LDY()
+      IS_STY()
+      IS_CPX_CPY(CPX)
+      IS_CPX_CPY(CPY)
 
-    /* illegal opcodes */
-    IS_ILLEGAL_NOP()
-    IS_LAX()
-    IS_SAX()
-    IS_ILLEGAL_SBC()
-    IS_ILLEGAL_RMW_OPC(DCP)
-    IS_ILLEGAL_RMW_OPC(ISB)
-    IS_ILLEGAL_RMW_OPC(SLO)
-    IS_ILLEGAL_RMW_OPC(RLA)
-    IS_ILLEGAL_RMW_OPC(SRE)
+      /* illegal opcodes */
+      IS_ILLEGAL_NOP()
+      IS_LAX()
+      IS_SAX()
+      IS_ILLEGAL_SBC()
+      IS_ILLEGAL_RMW_OPC(DCP)
+      IS_ILLEGAL_RMW_OPC(ISB)
+      IS_ILLEGAL_RMW_OPC(SLO)
+      IS_ILLEGAL_RMW_OPC(RLA)
+      IS_ILLEGAL_RMW_OPC(SRE)
       IS_ILLEGAL_RMW_OPC(RRA)
-  default:
-    /*
-    sprintf(e_context, "%02x", opc);
-    return -E_ILLEGAL_OPC;
-    */
-    sprintf(e_context, "%02x", opc);
-    return -E_ILLEGAL_OPC;
+	
+    default:
+      sprintf(e_context, "%02x", opc);
+      return -E_ILLEGAL_OPC;
+    }
   }
-  #ifdef DOING_HARTE_TESTS
+#ifdef DOING_HARTE_TESTS
   update_flags(cpu);
   update_cpu_state(cpu);
-  #endif
+#endif
   on_cpu_state_update(&cpu_state, on_cpu_state_update_data);
   return 1;
 }
@@ -849,7 +857,7 @@ static inline uint16_t indexed_indirect(cpu_s *cpu) {
    * about 65x02 which is maybe slightly different even though I read that
    * cycle stuff is supposed to be the same
    */
-  fetch8(cpu, zp_addr); 
+  fetch8(cpu, zp_addr);
   uint16_t idx_low = (zp_addr + cpu->x) & 0xFF;
   uint16_t idx_high = (idx_low + 1) & 0xFF;
   return fetch8(cpu, idx_low) | (fetch8(cpu, idx_high) << 8);
@@ -1216,7 +1224,9 @@ static inline void branch_flag_clear(cpu_s *cpu, addr_mode_e mode,
     cpu->pc += (int8_t)offset;
 
     if (page != (cpu->pc & 0xFF00)) {
-      fetch8(cpu, page | (cpu->pc & 0xFF)); /* dummy fetch pc + 2 + offset (before cross) */
+      fetch8(cpu,
+             page | (cpu->pc &
+                     0xFF)); /* dummy fetch pc + 2 + offset (before cross) */
     }
   }
 }
@@ -1228,7 +1238,9 @@ static inline void branch_flag_set(cpu_s *cpu, addr_mode_e mode, uint8_t flag) {
     uint16_t page = cpu->pc & 0xFF00;
     cpu->pc += (int8_t)offset;
     if (page != (cpu->pc & 0xFF00)) {
-      fetch8(cpu, page | (cpu->pc & 0xFF)); /* dummy fetch pc + 2 + offset (before cross) */
+      fetch8(cpu,
+             page | (cpu->pc &
+                     0xFF)); /* dummy fetch pc + 2 + offset (before cross) */
     }
   }
 }
@@ -1472,22 +1484,22 @@ static void RTS(cpu_s *cpu, addr_mode_e mode) {
 }
 
 static void BRK(cpu_s *cpu, addr_mode_e mode) {
-  fetch8(cpu, cpu->pc); /* dummy fetch pc + 1 */
+  fetch8(cpu, cpu->pc); /* dummy fetch pc + 1 (pc again if NMI)*/
   stack_push(cpu, ((cpu->pc + 1) & 0xFF00) >> 8);
   stack_push(cpu, (cpu->pc + 1) & 0xFF);
   stack_push(cpu, (cpu->flags & ~MASK_NVDIZC) | FLAG_BREAK | FLAG_UNUSED);
   cpu->flags = (cpu->flags & MASK_I) | FLAG_INT_DISABLE;
-  cpu->pc = fetch16(cpu, 0xFFFE);
+  cpu->pc = fetch16(cpu, cpu->in_nmi? 0xFFFA : 0xFFFE);
 }
 
 static void RTI(cpu_s *cpu, addr_mode_e mode) {
-  fetch8(cpu, cpu->pc); /* 2x dummy fetch pc + 1 */
+  fetch8(cpu, cpu->pc);            /* 2x dummy fetch pc + 1 */
   fetch8(cpu, (1 << 8) | cpu->sp); /* dummy fetch stack ? */
   cpu->flags = (cpu->flags & MASK_NVDIZC) | stack_pop(cpu);
-  /* harte tests require break "flag" not set */
-  #ifdef DOING_HARTE_TESTS
+/* harte tests require break "flag" not set */
+#ifdef DOING_HARTE_TESTS
   cpu->flags &= ~FLAG_BREAK;
-  #endif
+#endif
   uint8_t pc_low = stack_pop(cpu);
   uint8_t pc_high = stack_pop(cpu);
   cpu->pc = (pc_low | pc_high << 8);
@@ -1508,7 +1520,7 @@ static void PHP(cpu_s *cpu, addr_mode_e mode) {
 
 /* Flags: N+ V 1 B D I Z+ C */
 static void PLA(cpu_s *cpu, addr_mode_e mode) {
-  fetch8(cpu, cpu->pc);                       /* dummy fetch pc + 1 */
+  fetch8(cpu, cpu->pc); /* dummy fetch pc + 1 */
   fetch8(cpu, (1 << 8) | cpu->sp);
   cpu->a = stack_pop(cpu);
   cpu->flags = (cpu->flags & MASK_NZ) | (!cpu->a << ZERO_SHIFT) |
@@ -1517,7 +1529,7 @@ static void PLA(cpu_s *cpu, addr_mode_e mode) {
 
 /* Flags: N+ V+ 1 1 D+ I (+1) Z+ C+ */
 static void PLP(cpu_s *cpu, addr_mode_e mode) {
-  fetch8(cpu, cpu->pc); /* dummy fetch pc + 1 */
+  fetch8(cpu, cpu->pc);            /* dummy fetch pc + 1 */
   fetch8(cpu, (1 << 8) | cpu->sp); /* dummy fetch stack */
   uint8_t flags = stack_pop(cpu);
   cpu->to_update_flags = 2;
