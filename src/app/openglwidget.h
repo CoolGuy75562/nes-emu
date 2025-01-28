@@ -8,6 +8,7 @@
 #include <QOpenGLTexture>
 #include <QOpenGLVertexArrayObject>
 #include <QOpenGLBuffer>
+#include <QOpenGLShaderProgram>
 
 #include "nesscreen.h"
 
@@ -22,19 +23,17 @@ public:
   ~OpenGLWidget();
   
   void initScreen(NESScreen *s);
-			      
-public slots:
-  void draw_pbuf();
   
 protected:
   void initializeGL() override;
   void paintGL() override;
-  NESScreen *screen;
+  void resizeGL(int w, int h) override;
 
 private:
   std::array<uint8_t, nes_screen_size> *pbuf_ptr;
   QOpenGLVertexArrayObject vao;
   QOpenGLBuffer vbo;
+  QOpenGLShaderProgram *program;
 };
 
 #endif

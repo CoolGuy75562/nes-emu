@@ -4,10 +4,11 @@
 void put_pixel(int i, int j, uint8_t palette_idx, void *screen) {
   static NESScreen *s;
   s = static_cast<NESScreen *>(screen);
-  s->pbuf.at(nes_screen_width * i + j) = NESScreen::palette[palette_idx];
-  s->pbuf.at(nes_screen_width * i + j + 1) = NESScreen::palette[palette_idx + 1];
-  s->pbuf.at(nes_screen_width * i + j + 2) = NESScreen::palette[palette_idx + 2];
-  if (nes_screen_width * i + j + 2 == nes_screen_size - 1) {
+  int index = (nes_screen_width * i + j) * 3;
+  s->pbuf.at(index) = NESScreen::palette[palette_idx];
+  s->pbuf.at(index + 1) = NESScreen::palette[palette_idx + 1];
+  s->pbuf.at(index + 2) = NESScreen::palette[palette_idx + 2];
+  if (index + 2 == nes_screen_size - 1) {
     s->emit pbuf_full();
   }
 }
@@ -39,5 +40,5 @@ void (*NESScreen::get_put_pixel(void))(int, int, uint8_t, void *) {
 }
 
 std::array<uint8_t, nes_screen_size> *NESScreen::getPBufPtr() {
-  return &(this->pbuf);
+  return &pbuf;
 }

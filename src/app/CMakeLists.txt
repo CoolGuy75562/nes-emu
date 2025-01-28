@@ -6,7 +6,9 @@ if(CMAKE_VERSION VERSION_LESS "3.7.0")
     set(CMAKE_INCLUDE_CURRENT_DIR ON)
 endif()
 
-find_package(Qt5 REQUIRED COMPONENTS Widgets)
+find_package(OpenGL REQUIRED)
+find_package(GLUT REQUIRED)
+find_package(Qt5 REQUIRED COMPONENTS Widgets OpenGL)
 
 add_executable(nes-emu
     main.cpp
@@ -27,5 +29,7 @@ set_target_properties(nes-emu
 target_link_libraries(nes-emu
     core
     Qt5::Widgets
-    #asan
+    Qt5::OpenGL
+    ${OPENGL_LIBRARIES}
+    ${GLUT_LIBRARY}
 )
