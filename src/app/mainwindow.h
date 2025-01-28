@@ -35,9 +35,11 @@ public slots:
 signals:
   void pause_button_clicked();
   void play_button_clicked();
+  void step_button_clicked();
   
 private:
-
+  void init_table_widget(std::string which_widget);
+  
   Ui::MainWindow *ui;
   static const QStringList cpu_labels;
   static const QStringList ppu_labels;
@@ -47,7 +49,8 @@ private:
 private slots:
   void on_pauseButton_clicked();
   void on_playButton_clicked();
-
+  void on_stepButton_clicked();
+  
   void refresh_cpu_state();
   void refresh_ppu_state();
 };

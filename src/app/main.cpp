@@ -32,8 +32,8 @@
 #include "nescontext.h"
 #include "nesscreen.h"
 
-static void log_none(const char *format, ...) {}
-static void log_memory_none(uint16_t addr, uint8_t val, void *data) {}
+extern "C" void log_none(const char *format, ...) {}
+extern "C" void log_memory_none(uint16_t addr, uint8_t val, void *data) {}
 
 static void init(MainWindow &w);
 
@@ -65,13 +65,13 @@ static void init(MainWindow &w) {
   memory_register_cb(&log_memory_none, NULL, MEMORY_CB_FETCH);
   memory_register_cb(&log_memory_none, NULL, MEMORY_CB_WRITE);
 
-  /* ew ? */
   qDebug() << "Initialising NESScreen";
   NESScreen *s = new NESScreen(&w);
   w.initOpenGLWidgetNESScreen(s);
   
   try {
     qDebug() << "Initialising NESContext";
+    /* here s is just callback data, NESContext doesn't care about NESScreen */
     nes_context = new NESContext(rom_filename, s->get_put_pixel(), s, &w);
   } catch (NESError &e) {
     show_error(&w, e);
@@ -86,10 +86,15 @@ static void init(MainWindow &w) {
   QObject::connect(nes_context, SIGNAL(nes_error(NESError &)), &w,
                    SLOT(error(NESError &)));
 
+  /* cpu steps when 0ms timer times out, and stop/start buttons
+   * control whether timer is going or not.
+   */
   QTimer *timer = new QTimer(&w);
   QObject::connect(timer, SIGNAL(timeout()), nes_context, SLOT(nes_step()));
   QObject::connect(&w, SIGNAL(play_button_clicked()), timer, SLOT(start()));
   QObject::connect(&w, SIGNAL(pause_button_clicked()), timer, SLOT(stop()));
 
+  QObject::connect(&w, SIGNAL(step_button_clicked()), timer, SLOT(stop()));
+  QObject::connect(&w, SIGNAL(step_button_clicked()), nes_context, SLOT(nes_step()));
   qDebug() << "Init done";
 }

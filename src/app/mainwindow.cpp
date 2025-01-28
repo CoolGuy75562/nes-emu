@@ -13,12 +13,13 @@ void show_error(QWidget *parent, NESError &e) {
 }
 
 void on_cpu_state_update(cpu_state_s *state, void *window) {
-  MainWindow *win = static_cast<MainWindow *>(window);
+  /* there is only one main window so only need to set this once */
+  static MainWindow *win = static_cast<MainWindow *>(window);
   win->cpu_state = state;
 }
 
 void on_ppu_state_update(ppu_state_s *state, void *window) {
-  MainWindow *win = static_cast<MainWindow *>(window);
+  static MainWindow *win = static_cast<MainWindow *>(window);
   win->ppu_state = state;
 }
 
@@ -47,40 +48,64 @@ MainWindow::MainWindow(QWidget *parent)
   ppu_state = nullptr;
   qDebug() << "MainWindow: Setting up ui";
   ui->setupUi(this);
-  /* until I can get headers to work with QTableView this
-   * will have to do...
-   */
-
+  
   cpu_register_state_callback(&on_cpu_state_update, this);
   ppu_register_state_callback(&on_ppu_state_update, this);
-  
-  ui->cpuStateTableWidget->setRowCount(10);
-  ui->cpuStateTableWidget->setColumnCount(1);
-  ui->cpuStateTableWidget->setVerticalHeaderLabels(cpu_labels);
-  ui->cpuStateTableWidget->horizontalHeader()->setSectionResizeMode(
-      0, QHeaderView::Stretch);
-  ui->cpuStateTableWidget->horizontalHeader()->hide();
-  
-  ui->ppuStateTableWidget->setRowCount(13);
-  ui->ppuStateTableWidget->setColumnCount(1);
-  ui->ppuStateTableWidget->setVerticalHeaderLabels(ppu_labels);
-  ui->ppuStateTableWidget->horizontalHeader()->setSectionResizeMode(
-      0, QHeaderView::Stretch);
-  ui->ppuStateTableWidget->horizontalHeader()->hide();
+
+  init_table_widget("ppu");
+  init_table_widget("cpu");
 
   QTimer *timer = new QTimer(this);
+  timer->setInterval(1000);
+
+  /* play/pause button behaviour */
   connect(timer, SIGNAL(timeout()), this, SLOT(refresh_cpu_state()));
   connect(timer, SIGNAL(timeout()), this, SLOT(refresh_ppu_state()));
-  timer->start(1000);
+
+  connect(this, SIGNAL(play_button_clicked()), timer, SLOT(start()));
+  connect(this, SIGNAL(pause_button_clicked()), timer, SLOT(stop()));
+
+  /* step button behaviour */
+  connect(this, SIGNAL(step_button_clicked()), timer, SLOT(stop()));
+  connect(this, SIGNAL(step_button_clicked()), this, SLOT(refresh_cpu_state()));
+  connect(this, SIGNAL(step_button_clicked()), this, SLOT(refresh_ppu_state()));
 }
 
 MainWindow::~MainWindow() { delete ui; }
+
+
+void MainWindow::init_table_widget(std::string which_widget) {
+  int rows, cols;
+  const QStringList *labels;
+  QTableWidget *widget;
+  if (which_widget.compare("cpu")) {
+    widget = ui->ppuStateTableWidget;
+    rows = 13;
+    cols = 1;
+    labels = &ppu_labels;
+  } else {
+    widget = ui->cpuStateTableWidget;
+    rows = 10;
+    cols = 1;
+    labels = &cpu_labels;
+  }
+  
+  widget->setRowCount(rows);
+  widget->setColumnCount(cols);
+  widget->setVerticalHeaderLabels(*labels);
+  widget->horizontalHeader()->setSectionResizeMode(
+      0, QHeaderView::Stretch);
+  widget->horizontalHeader()->hide();
+}
+
 
 void MainWindow::initOpenGLWidgetNESScreen(NESScreen *s) {
   ui->openGLWidget->initScreen(s);
 }
 
-/* terrible */
+/* until I can get headers to work with QTableView this
+   * will have to do...
+   */
 void MainWindow::refresh_cpu_state() {
   if (cpu_state == nullptr) {
     return;
@@ -154,4 +179,8 @@ void MainWindow::on_pauseButton_clicked() {
 
 void MainWindow::on_playButton_clicked() {
   emit play_button_clicked();
+}
+
+void MainWindow::on_stepButton_clicked() {
+  emit step_button_clicked();
 }

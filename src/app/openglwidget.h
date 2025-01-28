@@ -21,7 +21,8 @@ class OpenGLWidget : public QOpenGLWidget, protected QOpenGLFunctions{
 public:
   OpenGLWidget(QWidget *parent);
   ~OpenGLWidget();
-  
+
+  /* connect pbuf_full signal to update slot, and set pbuf_ptr to pbuf in s */
   void initScreen(NESScreen *s);
   
 protected:

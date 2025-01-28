@@ -125,12 +125,12 @@ typedef struct ppu_s {
 
   /* other things to keep track of */
   uint16_t cycles;
-  uint16_t total_cycles;
   uint16_t scanline;
+  uint32_t total_cycles;
+  uint8_t ready_to_write;
   uint8_t frame_parity;        /* 0: even, 1: odd */
   uint8_t to_toggle_rendering; /* counts down each dot, toggles rendering when
                                   reaches 1 */
-  uint8_t ready_to_write;
 } ppu_s;
 
 static ppu_state_s ppu_state;
@@ -191,7 +191,9 @@ void ppu_step(ppu_s *ppu) {
   }
   increment_ppu(ppu);
   ppu->total_cycles++;
-  
+  if (!ppu->ready_to_write && ppu->total_cycles > 3 * IGNORE_REG_WRITE_CYCLES) {
+    ppu->ready_to_write = 1;
+  }
   state_update(ppu);
   on_ppu_state_update(&ppu_state, on_ppu_state_update_data);
 }
@@ -219,10 +221,14 @@ void ppu_register_write(ppu_s *ppu, uint8_t regno, uint8_t val) {
   ppu->ppu_db = val;
   switch (regno) {
   case 0:
-    ppuctrl_write(ppu, val);
+    if (ppu->ready_to_write) {
+      ppuctrl_write(ppu, val);
+    }
     break;
   case 1:
-    ppumask_write(ppu, val);
+    if (ppu->ready_to_write) {
+      ppumask_write(ppu, val);
+    }
     break;
   case 3:
     oamaddr_write(ppu, val);
@@ -231,10 +237,14 @@ void ppu_register_write(ppu_s *ppu, uint8_t regno, uint8_t val) {
     oamdata_write(ppu, val);
     break;
   case 5:
-    ppuscroll_write(ppu, val);
+    if (ppu->ready_to_write) {
+      ppuscroll_write(ppu, val);
+    }
     break;
   case 6:
-    ppuaddr_write(ppu, val);
+    if (ppu->ready_to_write) {
+      ppuaddr_write(ppu, val);
+    }
     break;
   case 7:
     ppudata_write(ppu, val);
