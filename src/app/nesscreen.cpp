@@ -2,9 +2,11 @@
 #include <QtDebug>
 
 void put_pixel(int i, int j, uint8_t palette_idx, void *screen) {
-  static NESScreen *s;
-  s = static_cast<NESScreen *>(screen);
+  static NESScreen *s = static_cast<NESScreen *>(screen);
   int index = (nes_screen_width * i + j) * 3;
+  palette_idx %= 64;
+  palette_idx *= 3;
+  
   s->pbuf.at(index) = NESScreen::palette[palette_idx];
   s->pbuf.at(index + 1) = NESScreen::palette[palette_idx + 1];
   s->pbuf.at(index + 2) = NESScreen::palette[palette_idx + 2];

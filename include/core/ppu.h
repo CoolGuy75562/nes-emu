@@ -76,12 +76,12 @@ void ppu_destroy(ppu_s *ppu);
 uint8_t ppu_register_fetch(ppu_s *ppu, uint8_t regno);
 
 /* deals with the internal effect fo writing to a ppu register */
-void ppu_register_write(ppu_s *ppu, uint8_t regno, uint8_t val);
+void ppu_register_write(ppu_s *ppu, uint8_t regno, uint8_t val, uint8_t *to_oamdma);
 
 /* return 1 if nmi */
 uint8_t ppu_check_nmi(ppu_s *ppu);
 
 /* does one ppu cycle */
-void ppu_step(ppu_s *ppu);
+void ppu_step(ppu_s *ppu, uint8_t *to_nmi);
 
 #endif

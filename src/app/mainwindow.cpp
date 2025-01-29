@@ -9,6 +9,7 @@
 
 void show_error(QWidget *parent, NESError &e) {
   std::cout << e.what() << std::endl;
+  memory_dump();
   QMessageBox::critical(parent, "Error", e.what());
 }
 
@@ -169,8 +170,11 @@ void MainWindow::refresh_ppu_state() {
 void MainWindow::done(void) { QApplication::quitOnLastWindowClosed(); }
 
 void MainWindow::error(NESError &e) {
+  emit pause_button_clicked();
+  refresh_cpu_state();
+  refresh_ppu_state();
   show_error(this, e);
-  QApplication::quit();
+  //QApplication::quit();
 }
 
 void MainWindow::on_pauseButton_clicked() {

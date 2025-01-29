@@ -148,10 +148,11 @@ int memory_init(const char *filename, ppu_s *p, char *e_context) {
       0) {
     goto error;
   }
-  if (header_data.trainer &&
-      fread(memory_cpu + 0x7000, sizeof(char), 512, fp) < 512) {
-    err = -E_READ_FILE;
-    goto error;
+  if (header_data.trainer) {
+    if (fread(memory_cpu + 0x7000, sizeof(char), 512, fp) < 512) {
+      err = -E_READ_FILE;
+      goto error;
+    }
   }
 
   switch (header_data.mapper_n) {
@@ -181,29 +182,25 @@ uint16_t memory_init_cpu_pc(void) {
 }
 
 void memory_dump(void) {
-  FILE *fp;
-  fp = fopen("./memory_dump.log", "w");
   size_t i, j;
   char c;
   for (i = 0; i < 0x1000; i++) {
-    fprintf(fp, "%3x0: ", (unsigned)i);
+    printf("%3x0: ", (unsigned)i);
     for (j = 0; j < 0x10; j++) {
-      fprintf(fp, "%2x ", memory_cpu[0x10 * i + j]);
+      printf("%2x ", memory_cpu[0x10 * i + j]);
     }
-    fprintf(fp, "|");
+    printf("|");
     for (j = 0; j < 0x10; j++) {
       c = memory_cpu[0x10 * i + j];
       if (c == 0 || !isprint(c)) {
-        fprintf(fp, ".");
+        printf(".");
       } else {
-        fprintf(fp, "%c", c);
+        printf("%c", c);
       }
     }
-    fprintf(fp, "|");
-    fprintf(fp, "\n");
+    printf("|");
+    printf("\n");
   }
-  fclose(fp);
-  printf("memory dump written to memory_dump.log\n");
 }
 
 /*
@@ -232,10 +229,12 @@ void memory_do_oamdma(uint8_t val, uint16_t *cycles, uint8_t *to_nmi) {
   if (*cycles & 1) {
     (*cycles)++;
   }
+  static uint8_t does_nothing;
   uint16_t a_high = val << 8;
   for (int i = 0; i < 0x100; i++) {
-    ppu_register_write(ppu, 4, memory_cpu[a_high + i]); /* 4: OAMDATA */
+    ppu_register_write(ppu, 4, memory_cpu[a_high + i], &does_nothing); /* 4: OAMDATA */
     *cycles += 2;
+    do_three_ppu_steps(to_nmi);
     do_three_ppu_steps(to_nmi);
   }
 }
@@ -258,6 +257,11 @@ uint8_t memory_fetch(uint16_t addr, uint8_t *to_nmi) {
       effective_addr = 0x2000 + (addr - 0x2000) % 8;
     }
 
+    else if (addr == 0x4014) {
+      val = ppu_register_fetch(ppu, 0x14);
+      effective_addr = addr;
+    }
+    
     else if (addr < 0x4018) {
       val = memory_cpu[addr];
       effective_addr = addr;
@@ -276,7 +280,7 @@ uint8_t memory_fetch(uint16_t addr, uint8_t *to_nmi) {
 
 void memory_write(uint16_t addr, uint8_t val, uint8_t *to_oamdma,
                   uint8_t *to_nmi) {
-
+  
   uint16_t effective_addr;
   if (ppu == NULL) { /* no ppu mode */
     memory_cpu[addr] = val;
@@ -290,18 +294,16 @@ void memory_write(uint16_t addr, uint8_t val, uint8_t *to_oamdma,
     }
 
     else if (addr < 0x4000) {
-      ppu_register_write(ppu, (addr - 0x2000) % 8, val);
+      ppu_register_write(ppu, (addr - 0x2000) % 8, val, to_oamdma);
       effective_addr = 0x2000 + (addr - 0x2000) % 8;
     }
 
-    else if (addr < 0x4018) {
-      if (addr == 0x4014) { /* OAMDMA */
-        *to_oamdma = 1;
-      }
-      memory_cpu[addr] = val;
+    /*
+    else if (addr == 0x4014) {
+      ppu_register_write(ppu, 0x14, val, to_oamdma);
       effective_addr = addr;
     }
-
+    */
     else if (addr < 0x4020) {
       memory_cpu[addr] = val;
       effective_addr = addr;
@@ -403,9 +405,6 @@ static int init_mapper_0(ines_header_s *header_data, FILE *fp, char *e_context) 
 static void do_three_ppu_steps(uint8_t *to_nmi) {
   /* three ppu cycles per one cpu cycle */
   for (int i = 0; i < 3; i++) {
-    ppu_step(ppu);
-    if (!(*to_nmi)) {
-      *to_nmi = ppu_check_nmi(ppu);
-    }
+    ppu_step(ppu, to_nmi);
   }
 }

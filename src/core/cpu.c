@@ -598,12 +598,13 @@ int cpu_exec(cpu_s *cpu, char *e_context) {
 
   if (cpu->to_nmi) {
     NMI(cpu);
-  }
+  } 
   /*
   else if (cpu->to_irq) {
     IRQ(cpu);
   }
   */
+
   else {
     uint8_t opc = fetch8(cpu, cpu->pc++); /* 1 cycle */
     switch (opc) {
@@ -731,12 +732,11 @@ static inline uint16_t fetch16(cpu_s *cpu, uint16_t addr) {
 static inline void write8(cpu_s *cpu, uint16_t addr, uint8_t val) {
   memory_write(addr, val, &(cpu->to_oamdma), &(cpu->to_nmi));
   cpu->cycles++;
-  /*
+  
   if (cpu->to_oamdma) {
     memory_do_oamdma(val, &(cpu->cycles), &(cpu->to_nmi));
     cpu->to_oamdma = 0;
   }
-  */
 }
 
 static inline void stack_push(cpu_s *cpu, uint8_t val) {
@@ -1483,13 +1483,28 @@ static void RTS(cpu_s *cpu, addr_mode_e mode) {
   cpu->pc = (pc_low | pc_high << 8) + 1;
 }
 
+/* lol */
 static void BRK(cpu_s *cpu, addr_mode_e mode) {
   fetch8(cpu, cpu->pc); /* dummy fetch pc + 1 (pc again if NMI)*/
-  stack_push(cpu, ((cpu->pc + 1) & 0xFF00) >> 8);
-  stack_push(cpu, (cpu->pc + 1) & 0xFF);
-  stack_push(cpu, (cpu->flags & ~MASK_NVDIZC) | FLAG_BREAK | FLAG_UNUSED);
+  if (cpu->in_nmi) {
+    stack_push(cpu, cpu->pc & 0xFF00 >> 8);
+    stack_push(cpu, cpu->pc & 0xFF);
+  }else {
+      stack_push(cpu, ((cpu->pc + 1) & 0xFF00) >> 8);
+      stack_push(cpu, (cpu->pc + 1) & 0xFF);
+  }
+  if (cpu->in_nmi) {
+    stack_push(cpu, (cpu->flags & ~MASK_NVDIZC) | FLAG_UNUSED);
+  } else {
+    stack_push(cpu, (cpu->flags & ~MASK_NVDIZC) | FLAG_BREAK | FLAG_UNUSED);
+  }
   cpu->flags = (cpu->flags & MASK_I) | FLAG_INT_DISABLE;
-  cpu->pc = fetch16(cpu, cpu->in_nmi? 0xFFFA : 0xFFFE);
+
+  if (cpu->in_nmi) {
+    cpu->pc = fetch16(cpu, 0xFFFA);
+  } else {
+    cpu->pc = fetch16(cpu, 0xFFFE);
+  }
 }
 
 static void RTI(cpu_s *cpu, addr_mode_e mode) {
