@@ -1,6 +1,8 @@
 #include <QMessageBox>
 #include <QtDebug>
 #include <QTimer>
+#include <QPlainTextEdit>
+#include <QBoxLayout>
 #include <iostream>
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
@@ -9,7 +11,7 @@
 
 void show_error(QWidget *parent, NESError &e) {
   std::cout << e.what() << std::endl;
-  memory_dump();
+  //memory_dump_file(stdout);
   QMessageBox::critical(parent, "Error", e.what());
 }
 
@@ -187,4 +189,29 @@ void MainWindow::on_playButton_clicked() {
 
 void MainWindow::on_stepButton_clicked() {
   emit step_button_clicked();
+}
+
+void MainWindow::on_memoryDumpButton_clicked() {
+  emit pause_button_clicked();
+  QDialog memory_dump_dialog(this);
+
+  QPlainTextEdit *memory_dump_text_view =
+      new QPlainTextEdit(&memory_dump_dialog);
+  memory_dump_text_view->setReadOnly(true);
+  char dump_data[1 << 19];
+  size_t dump_len = 1 << 19;
+  if (memory_dump_string(dump_data, dump_len) < 0) {
+    qDebug() << "Memory dump didn't work";
+  } else {
+    memory_dump_text_view->setLineWrapMode(QPlainTextEdit::NoWrap);
+    memory_dump_text_view->setPlainText(dump_data);
+    memory_dump_text_view->setFont(QFont("Monospace"));
+    //memory_dump_text_view->setFixedWidth(memory_dump_text_view->document()->size().width() + 10);
+  }
+  
+  QBoxLayout memory_dump_dialog_layout(QBoxLayout::TopToBottom);
+  memory_dump_dialog_layout.addWidget(memory_dump_text_view);
+
+  memory_dump_dialog.setLayout(&memory_dump_dialog_layout);
+  memory_dump_dialog.exec();
 }

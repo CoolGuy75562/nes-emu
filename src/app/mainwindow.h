@@ -50,6 +50,7 @@ private slots:
   void on_pauseButton_clicked();
   void on_playButton_clicked();
   void on_stepButton_clicked();
+  void on_memoryDumpButton_clicked();
   
   void refresh_cpu_state();
   void refresh_ppu_state();

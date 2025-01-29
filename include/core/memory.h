@@ -20,6 +20,7 @@
 #include "core/ppu.h"
 #include <stdint.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 typedef enum memory_cb_e { MEMORY_CB_WRITE, MEMORY_CB_FETCH } memory_cb_e;
 
@@ -78,7 +79,14 @@ void memory_do_oamdma(uint8_t val, uint16_t *cycles, uint8_t *to_nmi);
 void ines_header_dump(void);
 
 /* hexdump cpu memory contents to file */
-void memory_dump(void);
+int memory_dump_file(FILE *fp);
+
+/* hexdump memory contents to string dump
+ *
+ * return -1 if dump_len was not long enough,
+ * 0 otherwise 
+ */
+int memory_dump_string(char *dump, size_t dump_len);
 
 /* Initialises memory to addrs and vals */
 void memory_init_harte_test_case(const uint16_t *addrs, const uint8_t *vals, size_t length);

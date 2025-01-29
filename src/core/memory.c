@@ -88,8 +88,7 @@ static void (*on_write)(uint16_t addr, uint8_t val, void *) = NULL;
 static void *on_write_data = NULL;
 
 void memory_register_cb(void (*memory_cb)(uint16_t, uint8_t, void *),
-			void *data,
-                        memory_cb_e cb_type) {
+                        void *data, memory_cb_e cb_type) {
   switch (cb_type) {
   case MEMORY_CB_FETCH:
     on_fetch = memory_cb;
@@ -122,7 +121,7 @@ int memory_init(const char *filename, ppu_s *p, char *e_context) {
 
   if (filename == NULL && p == NULL) { /* no ppu mode for testing cpu */
     ppu = p;
-    //memset(memory_cpu, 0, sizeof(memory_cpu));
+    // memset(memory_cpu, 0, sizeof(memory_cpu));
     return E_NO_ERROR;
   } else if (p == NULL) {
     return -E_NO_PPU;
@@ -181,28 +180,78 @@ uint16_t memory_init_cpu_pc(void) {
   return (pc_low | pc_high << 8);
 }
 
-void memory_dump(void) {
+#define FPRINTF_CHECK_ERROR(fprintf_statement)                                 \
+  do {                                                                         \
+    if ((fprintf_statement) < 0) {                                             \
+      return -E_WRITE_FILE;                                                    \
+    }                                                                          \
+  } while (0)
+
+int memory_dump_file(FILE *fp) {
+  if (fp == NULL) {
+    return -E_NO_FILE;
+  }
   size_t i, j;
   char c;
   for (i = 0; i < 0x1000; i++) {
-    printf("%3x0: ", (unsigned)i);
+    FPRINTF_CHECK_ERROR(fprintf(fp, "%3x0: ", (unsigned)i));
     for (j = 0; j < 0x10; j++) {
-      printf("%2x ", memory_cpu[0x10 * i + j]);
+      FPRINTF_CHECK_ERROR(fprintf(fp, "%2x ", memory_cpu[0x10 * i + j]));
     }
-    printf("|");
+    fprintf(fp, "|");
     for (j = 0; j < 0x10; j++) {
       c = memory_cpu[0x10 * i + j];
       if (c == 0 || !isprint(c)) {
-        printf(".");
+        FPRINTF_CHECK_ERROR(fprintf(fp, "."));
       } else {
-        printf("%c", c);
+        FPRINTF_CHECK_ERROR(fprintf(fp, "%c", c));
       }
     }
-    printf("|");
-    printf("\n");
+    FPRINTF_CHECK_ERROR(fprintf(fp, "|"));
+    FPRINTF_CHECK_ERROR(fprintf(fp, "\n"));
   }
+  return E_NO_ERROR;
 }
+#undef FPRINTF_CHECK_ERROR
 
+int memory_dump_string(char *dump, size_t dump_len) {
+  if (dump == NULL) {
+    return -E_NO_STRING;
+  }
+  char buf[2048];
+  size_t offset, read = 0;
+  size_t i, j;
+  char c;
+
+  /* I don't like this */
+  for (i = 0; i < 0x1000; i++) {
+    offset = 0;
+    offset += sprintf(buf + offset, "%3x0: ", (unsigned)i);
+    for (j = 0; j < 0x10; j++) {
+      offset += sprintf(buf + offset, "%2x ", memory_cpu[0x10 * i + j]);
+    }
+    offset += sprintf(buf + offset, "|");
+    for (j = 0; j < 0x10; j++) {
+      c = memory_cpu[0x10 * i + j];
+      if (c == 0 || !isprint(c)) {
+        offset += sprintf(buf + offset, ".");
+      } else {
+        offset += sprintf(buf + offset, "%c", c);
+      }
+    }
+    offset += sprintf(buf + offset, "|\n");
+
+    read += offset;
+    if (read > dump_len) {
+      return -E_BUF_SIZE;
+    } else {
+      strncpy(dump, buf, offset);
+      dump += offset;
+    }
+  }
+  *dump = '\0';
+  return E_NO_ERROR;
+}
 /*
 void ines_header_dump(void) {
   FILE *fp;
@@ -232,7 +281,8 @@ void memory_do_oamdma(uint8_t val, uint16_t *cycles, uint8_t *to_nmi) {
   static uint8_t does_nothing;
   uint16_t a_high = val << 8;
   for (int i = 0; i < 0x100; i++) {
-    ppu_register_write(ppu, 4, memory_cpu[a_high + i], &does_nothing); /* 4: OAMDATA */
+    ppu_register_write(ppu, 4, memory_cpu[a_high + i],
+                       &does_nothing); /* 4: OAMDATA */
     *cycles += 2;
     do_three_ppu_steps(to_nmi);
     do_three_ppu_steps(to_nmi);
@@ -261,7 +311,7 @@ uint8_t memory_fetch(uint16_t addr, uint8_t *to_nmi) {
       val = ppu_register_fetch(ppu, 0x14);
       effective_addr = addr;
     }
-    
+
     else if (addr < 0x4018) {
       val = memory_cpu[addr];
       effective_addr = addr;
@@ -280,7 +330,7 @@ uint8_t memory_fetch(uint16_t addr, uint8_t *to_nmi) {
 
 void memory_write(uint16_t addr, uint8_t val, uint8_t *to_oamdma,
                   uint8_t *to_nmi) {
-  
+
   uint16_t effective_addr;
   if (ppu == NULL) { /* no ppu mode */
     memory_cpu[addr] = val;
@@ -327,7 +377,8 @@ void memory_init_harte_test_case(const uint16_t *addrs, const uint8_t *vals,
   }
 }
 
-void memory_reset_harte(const uint16_t *addrs, uint8_t *final_vals, size_t length) {
+void memory_reset_harte(const uint16_t *addrs, uint8_t *final_vals,
+                        size_t length) {
   for (size_t i = 0; i < length; i++) {
     final_vals[i] = memory_cpu[addrs[i]];
   }
@@ -367,7 +418,8 @@ static int parse_ines_header(char ines_header[16], ines_header_s *header_data,
   return E_NO_ERROR;
 }
 
-static int init_mapper_0(ines_header_s *header_data, FILE *fp, char *e_context) {
+static int init_mapper_0(ines_header_s *header_data, FILE *fp,
+                         char *e_context) {
 
   if (header_data->chr_rom_size != 1) {
     sprintf(e_context, "%d", header_data->chr_rom_size);

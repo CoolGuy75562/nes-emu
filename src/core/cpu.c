@@ -598,7 +598,7 @@ int cpu_exec(cpu_s *cpu, char *e_context) {
 
   if (cpu->to_nmi) {
     NMI(cpu);
-  } 
+    } 
   /*
   else if (cpu->to_irq) {
     IRQ(cpu);

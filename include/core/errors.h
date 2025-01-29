@@ -23,8 +23,9 @@
   X(E_NO_ERROR, ""), X(E_NO_PPU, "PPU not initialised"),                       \
       X(E_NO_CALLBACK, "Not all callbacks registered"),                        \
       X(E_NO_FILE, "File path is null"), X(E_ILLEGAL_OPC, "Illegal opcode"),   \
-      X(E_READ_FILE, "Error reading file"),                                    \
-      X(E_MALLOC, "Error allocating memory"),                                  \
+      X(E_READ_FILE, "Error reading file"), X(E_NO_STRING, "String is null"),  \
+      X(E_WRITE_FILE, "Error writing to file"),                                \
+    X(E_MALLOC, "Error allocating memory"), X(E_BUF_SIZE, "Buffer too small"), \
       X(E_INES_SIGNATURE, "Invalid iNES signature"),                           \
       X(E_MAPPER_IMPLEMENTED, "Mapper number not implemented: "),              \
       X(E_CHR_ROM_SIZE, "CHR ROM size incompatible with mapper number: "),     \
