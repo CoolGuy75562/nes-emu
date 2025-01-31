@@ -62,8 +62,6 @@ static void init(MainWindow &w) {
   /* for now */
   cpu_register_error_callback(&log_none);
   ppu_register_error_callback(&log_none);
-  memory_register_cb(&log_memory_none, NULL, MEMORY_CB_FETCH);
-  memory_register_cb(&log_memory_none, NULL, MEMORY_CB_WRITE);
 
   qDebug() << "Initialising NESScreen";
   NESScreen *s = new NESScreen(&w);

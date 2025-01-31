@@ -47,7 +47,7 @@ typedef struct ines_header_s {
 static int parse_ines_header(char ines_header[16], ines_header_s *header_data,
                              char *e_context);
 static int init_mapper_0(ines_header_s *header_data, FILE *fp, char *e_context);
-static void do_three_ppu_steps(uint8_t *to_nmi);
+static inline void do_three_ppu_steps(uint8_t *to_nmi);
 
 /* ======= Memory Layout =======
  * https://www.nesdev.org/wiki/CPU_memory_map
@@ -79,8 +79,7 @@ static void do_three_ppu_steps(uint8_t *to_nmi);
  */
 static uint8_t memory_cpu[0x10000] = {0};
 static ines_header_s header_data;
-/* better to do this than callback in main or
- * passing ppu to cpu to memory: */
+
 static ppu_s *ppu;
 static void (*on_fetch)(uint16_t addr, uint8_t val, void *) = NULL;
 static void *on_fetch_data = NULL;
@@ -223,7 +222,7 @@ int memory_dump_string(char *dump, size_t dump_len) {
   size_t i, j;
   char c;
 
-  /* I don't like this */
+  /* What if sprintf returns negative? */
   for (i = 0; i < 0x1000; i++) {
     offset = 0;
     offset += sprintf(buf + offset, "%3x0: ", (unsigned)i);
@@ -276,6 +275,7 @@ void ines_header_dump(void) {
 void memory_do_oamdma(uint8_t val, uint16_t *cycles, uint8_t *to_nmi) {
   /* if odd cpu cycle need to wait another cycle for dma to read */
   if (*cycles & 1) {
+    /* this should be done in cpu.c so we can do dummy fetch */
     (*cycles)++;
   }
   static uint8_t does_nothing;
@@ -283,6 +283,7 @@ void memory_do_oamdma(uint8_t val, uint16_t *cycles, uint8_t *to_nmi) {
   for (int i = 0; i < 0x100; i++) {
     ppu_register_write(ppu, 4, memory_cpu[a_high + i],
                        &does_nothing); /* 4: OAMDATA */
+    on_write(0x2004, memory_cpu[a_high + i], on_write_data);
     *cycles += 2;
     do_three_ppu_steps(to_nmi);
     do_three_ppu_steps(to_nmi);
@@ -303,8 +304,8 @@ uint8_t memory_fetch(uint16_t addr, uint8_t *to_nmi) {
     }
 
     else if (addr < 0x4000) {
-      val = ppu_register_fetch(ppu, (addr - 0x2000) % 8);
-      effective_addr = 0x2000 + (addr - 0x2000) % 8;
+      val = ppu_register_fetch(ppu, addr % 8);
+      effective_addr = 0x2000 + (addr % 8);
     }
 
     else if (addr == 0x4014) {
@@ -317,11 +318,20 @@ uint8_t memory_fetch(uint16_t addr, uint8_t *to_nmi) {
       effective_addr = addr;
     }
 
-    else {
+    else if (addr < 0x8000) {
       val = memory_cpu[addr];
       effective_addr = addr;
     }
 
+    else if (addr < 0xC000 && header_data.prg_rom_size == 1) {
+      val = memory_cpu[addr + 0x4000];
+      effective_addr = addr + 0x4000;
+    }
+
+    else {
+      val = memory_cpu[addr];
+      effective_addr = val;
+    }
     do_three_ppu_steps(to_nmi);
   }
   on_fetch(effective_addr, val, on_fetch_data);
@@ -344,21 +354,30 @@ void memory_write(uint16_t addr, uint8_t val, uint8_t *to_oamdma,
     }
 
     else if (addr < 0x4000) {
-      ppu_register_write(ppu, (addr - 0x2000) % 8, val, to_oamdma);
-      effective_addr = 0x2000 + (addr - 0x2000) % 8;
+      ppu_register_write(ppu, addr % 8, val, to_oamdma);
+      effective_addr = 0x2000 + (addr % 8);
     }
 
-    /*
     else if (addr == 0x4014) {
       ppu_register_write(ppu, 0x14, val, to_oamdma);
       effective_addr = addr;
     }
-    */
+
     else if (addr < 0x4020) {
       memory_cpu[addr] = val;
       effective_addr = addr;
     }
 
+    else if (addr < 0x8000) {
+      memory_cpu[addr] = val;
+      effective_addr = addr;
+    }
+
+    else if (addr < 0xC000 && header_data.prg_ram_size == 1) {
+      memory_cpu[addr + 0x4000] = val;
+      effective_addr = addr + 0x4000;
+    }
+    
     else {
       memory_cpu[addr] = val;
       effective_addr = addr;
@@ -421,7 +440,10 @@ static int parse_ines_header(char ines_header[16], ines_header_s *header_data,
 static int init_mapper_0(ines_header_s *header_data, FILE *fp,
                          char *e_context) {
 
-  if (header_data->chr_rom_size != 1) {
+  /* technically should be != 1 but I've come across some mapper 0
+   * ROMS with no chr rom
+   */
+  if (header_data->chr_rom_size > 1) {
     sprintf(e_context, "%d", header_data->chr_rom_size);
     return -E_CHR_ROM_SIZE;
   }
@@ -429,20 +451,19 @@ static int init_mapper_0(ines_header_s *header_data, FILE *fp,
     sprintf(e_context, "%d", header_data->prg_rom_size);
     return -E_PRG_ROM_SIZE;
   }
-  if (fread(memory_cpu + 0x8000, sizeof(char),
-            0x4000 * header_data->prg_rom_size,
-            fp) < 0x4000 * header_data->prg_rom_size) {
+  size_t prg_rom_bytes = 0x4000 * header_data->prg_rom_size;
+  if (fread(memory_cpu + 0x8000, 1, prg_rom_bytes, fp) != prg_rom_bytes) {
     return -E_READ_FILE;
   }
 
+  /* mirror first 16kb */
   if (header_data->prg_rom_size == 1) {
-    /* mirror first 16KB */
     memcpy(memory_cpu + 0xC000, memory_cpu + 0x8000, 0x4000);
   }
 
   if (ppu != NULL) {
 
-    uint8_t chr_rom[0x2000];
+    uint8_t chr_rom[0x2000] = {0};
 
     if (fread(chr_rom, sizeof(uint8_t), 0x2000 * header_data->chr_rom_size,
               fp) < 0x2000 * header_data->chr_rom_size) {
@@ -454,7 +475,7 @@ static int init_mapper_0(ines_header_s *header_data, FILE *fp,
   return E_NO_ERROR;
 }
 
-static void do_three_ppu_steps(uint8_t *to_nmi) {
+static inline void do_three_ppu_steps(uint8_t *to_nmi) {
   /* three ppu cycles per one cpu cycle */
   for (int i = 0; i < 3; i++) {
     ppu_step(ppu, to_nmi);
