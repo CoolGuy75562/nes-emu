@@ -373,7 +373,7 @@ void memory_write(uint16_t addr, uint8_t val, uint8_t *to_oamdma,
       effective_addr = addr;
     }
 
-    else if (addr < 0xC000 && header_data.prg_ram_size == 1) {
+    else if (addr < 0xC000 && header_data.prg_rom_size == 1) {
       memory_cpu[addr + 0x4000] = val;
       effective_addr = addr + 0x4000;
     }

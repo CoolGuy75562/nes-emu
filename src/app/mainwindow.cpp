@@ -200,24 +200,6 @@ MainWindow::MainWindow(QWidget *parent)
   ppu_register_state_callback(&on_ppu_state_update, ppu_model);
   memory_register_cb(&on_memory_fetch, memory_model, MEMORY_CB_FETCH);
   memory_register_cb(&on_memory_write, memory_model, MEMORY_CB_WRITE);
-  
-  QTimer *timer = new QTimer(this);
-  timer->setInterval(1000);
-
-  /* play/pause button behaviour */
-  /*
-  connect(timer, SIGNAL(timeout()), this, SLOT(refresh_cpu_state()));
-  connect(timer, SIGNAL(timeout()), this, SLOT(refresh_ppu_state()));
-  */
-  connect(this, SIGNAL(play_button_clicked()), timer, SLOT(start()));
-  connect(this, SIGNAL(pause_button_clicked()), timer, SLOT(stop()));
-
-  /* step button behaviour */
-  connect(this, SIGNAL(step_button_clicked()), timer, SLOT(stop()));
-  /*
-  connect(this, SIGNAL(step_button_clicked()), this, SLOT(refresh_cpu_state()));
-  connect(this, SIGNAL(step_button_clicked()), this, SLOT(refresh_ppu_state()));
-  */
 }
 
 MainWindow::~MainWindow() { delete ui; }
