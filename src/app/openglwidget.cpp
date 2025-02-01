@@ -23,8 +23,9 @@ OpenGLWidget::~OpenGLWidget() {
 
   vbo.release();
   vao.release();
-  program->release();
-  
+  if (program != nullptr) {
+    program->removeAllShaders();
+  }
   vao.destroy();
   vbo.destroy();
   

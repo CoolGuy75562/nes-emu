@@ -19,6 +19,7 @@ NESContext::NESContext(const std::string &rom_filename, void (*put_pixel)(int, i
   cpu_s *cpu = nullptr;
   nes_cpu_init(&cpu, 0);
   cpu_ptr.reset(cpu);
+  qDebug() << "NESContext: Init done";
 }
 
 /* Slots */
@@ -30,5 +31,6 @@ void NESContext::nes_step(void) {
     }
   } catch (NESError &e) {
     emit nes_error(e);
+    emit nes_done();
   }
 }

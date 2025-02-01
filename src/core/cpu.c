@@ -590,7 +590,6 @@ int cpu_exec(cpu_s *cpu, char *e_context) {
   if (on_cpu_state_update == NULL || log_error == NULL) {
     return -E_NO_CALLBACK;
   }
-
 #ifndef DOING_HARTE_TESTS
   update_cpu_state(cpu);
   update_flags(cpu);

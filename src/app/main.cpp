@@ -15,7 +15,6 @@
  */
 
 #include <QApplication>
-#include <QFileDialog>
 #include <QMainWindow>
 #include <QMessageBox>
 #include <QString>
@@ -29,70 +28,24 @@
 
 #include "core/cppwrapper.hpp"
 #include "mainwindow.h"
-#include "nescontext.h"
-#include "nesscreen.h"
 
 extern "C" void log_none(const char *format, ...) {}
-extern "C" void log_memory_none(uint16_t addr, uint8_t val, void *data) {}
-
-static void init(MainWindow &w);
 
 int main(int argc, char **argv) {
 
   QApplication a(argc, argv);
-  MainWindow w;
-  /* for some reason I have to do this by hand or else
-   the programme keeps running after I close the window */
-  QObject::connect(&a, SIGNAL(lastWindowClosed()), &a, SLOT(quit()));
+  std::unique_ptr<MainWindow> w;
   
-  init(w);
-  return a.exec();
-}
-
-
-static void init(MainWindow &w) {
-  qDebug() << "Initialising MainWindow";
-  NESContext *nes_context;
-  w.show();
-
-  const std::string rom_filename =
-      QFileDialog::getOpenFileName(&w, "Open File", "/home", "NES ROM (*.nes)")
-          .toStdString();
-
-  /* for now */
-  cpu_register_error_callback(&log_none);
   ppu_register_error_callback(&log_none);
-
-  qDebug() << "Initialising NESScreen";
-  NESScreen *s = new NESScreen(&w);
-  w.initOpenGLWidgetNESScreen(s);
-  
+  cpu_register_error_callback(&log_none);
   try {
-    qDebug() << "Initialising NESContext";
-    /* here s is just callback data, NESContext doesn't care about NESScreen */
-    nes_context = new NESContext(rom_filename, s->get_put_pixel(), s, &w);
+    w.reset(new MainWindow());
   } catch (NESError &e) {
-    show_error(&w, e);
     exit(EXIT_FAILURE);
   }
-
-  /*========================Signals and Slots===========================*/
-  
-  /* when nes execution is done */
-  QObject::connect(nes_context, SIGNAL(nes_done()), &w, SLOT(done()));
-
-  QObject::connect(nes_context, SIGNAL(nes_error(NESError &)), &w,
-                   SLOT(error(NESError &)));
-
-  /* cpu steps when 0ms timer times out, and stop/start buttons
-   * control whether timer is going or not.
-   */
-  QTimer *timer = new QTimer(&w);
-  QObject::connect(timer, SIGNAL(timeout()), nes_context, SLOT(nes_step()));
-  QObject::connect(&w, SIGNAL(play_button_clicked()), timer, SLOT(start()));
-  QObject::connect(&w, SIGNAL(pause_button_clicked()), timer, SLOT(stop()));
-
-  QObject::connect(&w, SIGNAL(step_button_clicked()), timer, SLOT(stop()));
-  QObject::connect(&w, SIGNAL(step_button_clicked()), nes_context, SLOT(nes_step()));
-  qDebug() << "Init done";
+  /* for some reason I have to do this by hand or else
+   the programme keeps running after I close the window */
+  w->show();
+  QObject::connect(&a, SIGNAL(lastWindowClosed()), &a, SLOT(quit()));
+  return a.exec();
 }

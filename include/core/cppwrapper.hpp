@@ -32,8 +32,10 @@ extern std::string error_messages[];
 
 class NESError : public std::runtime_error {
 public:
-  explicit NESError(int err, const std::string &info);
-  explicit NESError(int err);
+  NESError(int err, const std::string &info);
+  NESError(int err);
+  NESError(const NESError &other);
+  NESError();
 
 private:
   std::string errorMessage(int err, const std::string &info = "");

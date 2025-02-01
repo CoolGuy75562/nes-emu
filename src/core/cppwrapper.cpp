@@ -34,6 +34,11 @@ NESError::NESError(int err, const std::string &info)
 NESError::NESError(int err)
 : std::runtime_error(errorMessage(err)) {}
 
+NESError::NESError() : std::runtime_error("") {}
+
+NESError::NESError(const NESError &other)
+  : std::runtime_error(other.what()) {}
+			 
 std::string NESError::errorMessage(int err, const std::string &info) {
     std::string e_mesg =
         error_names[err].append(" ").append(error_messages[err]);

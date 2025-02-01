@@ -19,7 +19,7 @@ public slots:
   void nes_step(void);
   
 signals:
-  void nes_error(NESError &e);
+  void nes_error(NESError e);
   void nes_done(void);
 
 private:
