@@ -150,7 +150,7 @@ static uint8_t memory_secondary_oam[32] = {0};
 
 /* callbacks */
 static void (*log_error)(const char *, ...) = NULL;
-static void (*on_ppu_state_update)(ppu_state_s *ppu_state, void *data) = NULL;
+static void (*on_ppu_state_update)(const ppu_state_s *ppu_state, void *data) = NULL;
 static void (*put_pixel)(int i, int j, uint8_t palette_idx, void *data) = NULL;
 
 /* callback data */
@@ -158,7 +158,7 @@ static void *on_ppu_state_update_data = NULL;
 static void *put_pixel_data = NULL;
 
 /*----------------------------------------------------------------------------*/
-void ppu_register_state_callback(void (*ppu_state_cb)(ppu_state_s *, void *),
+void ppu_register_state_callback(void (*ppu_state_cb)(const ppu_state_s *, void *),
                                  void *data) {
   on_ppu_state_update = ppu_state_cb;
   on_ppu_state_update_data = data;
@@ -256,18 +256,19 @@ uint8_t ppu_register_fetch(ppu_s *ppu, uint8_t regno) {
 }
 
 void ppu_register_write(ppu_s *ppu, uint8_t regno, uint8_t val, uint8_t *to_oamdma) {
-  ppu->ppu_db = val;
   switch (regno) {
   case 0:
-    //if (ppu->ready_to_write) {
+    if (ppu->ready_to_write) {
       ppuctrl_write(ppu, val);
-      //}
+      }
     break;
   case 1:
-    // if (ppu->ready_to_write) {
+    if (ppu->ready_to_write) {
       ppumask_write(ppu, val);
-      //}
-    break;
+      }
+      break;
+  case 2:
+    ppu->ppu_db = val;
   case 3:
     oamaddr_write(ppu, val);
     break;
@@ -275,14 +276,14 @@ void ppu_register_write(ppu_s *ppu, uint8_t regno, uint8_t val, uint8_t *to_oamd
     oamdata_write(ppu, val);
     break;
   case 5:
-    // if (ppu->ready_to_write) {
+    if (ppu->ready_to_write) {
       ppuscroll_write(ppu, val);
-      //}
+      }
     break;
   case 6:
-    // if (ppu->ready_to_write) {
+    if (ppu->ready_to_write) {
       ppuaddr_write(ppu, val);
-      // }
+      }
     break;
   case 7:
     ppudata_write(ppu, val);
@@ -367,8 +368,7 @@ static uint8_t ppustatus_fetch(ppu_s *ppu) {
   ppu->ppustatus &= ~MASK_PPUSTATUS_ALL; /* clear vblank flag */
   update_nmi(ppu);
   /* I think the only the bits read will change the data bus */
-  ppu->ppu_db =
-      (ppu->ppu_db & ~MASK_PPUSTATUS_ALL) | (val & MASK_PPUSTATUS_ALL);
+  ppu->ppu_db = val;
   return val;
 }
 
@@ -395,19 +395,25 @@ static void ppuctrl_write(ppu_s *ppu, uint8_t val) {
   ppu->ppuctrl = val;
   /* ppuctrl = ......GH -> t = ... GH ..... ..... */
   ppu->t = /* double checked, this is right */
-      (ppu->t & ~MASK_T_V_NAMETABLE) | ((val & MASK_PPUCTRL_NAMETABLE) << 10);
+    (ppu->t & ~MASK_T_V_NAMETABLE) | ((val & MASK_PPUCTRL_NAMETABLE) << 10);
   update_nmi(ppu);
+  ppu->ppu_db = val;
 }
 
 static void ppumask_write(ppu_s *ppu, uint8_t val) {
   ppu->ppumask = val;
+  ppu->ppu_db = val;
 }
 
-static void oamaddr_write(ppu_s *ppu, uint8_t val) { ppu->oamaddr = val; }
+static void oamaddr_write(ppu_s *ppu, uint8_t val) {
+  ppu->oamaddr = val;
+  ppu->ppu_db = val;
+}
 
 static void oamdata_write(ppu_s *ppu, uint8_t val) {
   ppu->oamdata = val;
   memory_oam[ppu->oamaddr++] = val;
+  ppu->ppu_db = val;
 }
 
 static void ppuscroll_write(ppu_s *ppu, uint8_t val) {
@@ -416,7 +422,7 @@ static void ppuscroll_write(ppu_s *ppu, uint8_t val) {
     /* .....FGH -> t = 0 FGH .. ..... ..... */
     ppu->t = (ppu->t & ~MASK_T_V_FINE_Y) | ((val & MASK_PPUSCROLL_FINE) << 12);
     /* ABCDE... -> t = 0 ... .. ABCDE ..... */
-    ppu->t = (ppu->t & ~MASK_T_V_COARSE_Y) | (val << 2);
+    ppu->t = (ppu->t & ~MASK_T_V_COARSE_Y) | ((val & 0xF8) << 2);
     ppu->w = 0;
   } else {
     ppu->ppuscroll_x = val;
@@ -426,19 +432,21 @@ static void ppuscroll_write(ppu_s *ppu, uint8_t val) {
     ppu->t = (ppu->t & ~MASK_T_V_COARSE_X) | (val >> 3);
     ppu->w = 1;
   }
+  ppu->ppu_db = val;
 }
 
 static void ppuaddr_write(ppu_s *ppu, uint8_t val) {
-  if (ppu->w) {
+  if (!ppu->w) {
     ppu->ppuaddr_high = val & MASK_PPUADDR_HIGH;
     ppu->t = (ppu->t & 0xFF) | ((val & MASK_PPUADDR_HIGH) << 8);
-    ppu->w = 0;
-    ppu->v = ppu->t;
+    ppu->w = 1;
   } else {
     ppu->ppuaddr_low = val;
     ppu->t = (ppu->t & 0xFF00) | val;
-    ppu->w = 1;
+    ppu->w = 0;
+    ppu->v = ppu->t;
   }
+  ppu->ppu_db = val;
 }
 
 static void ppudata_write(ppu_s *ppu, uint8_t val) {
@@ -450,6 +458,7 @@ static void ppudata_write(ppu_s *ppu, uint8_t val) {
   ppu->v += (ppu->ppuctrl & MASK_PPUCTRL_INCREMENT) ? 32 : 1;
   ppu->v &= MASK_T_V_SCROLL_ALL;
   ppu->ppudata = val;
+  ppu->ppu_db = val;
 }
 
 static void oamdma_write(ppu_s *ppu, uint8_t val) {

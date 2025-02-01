@@ -482,7 +482,7 @@ static inline void SRE(cpu_s *cpu, addr_mode_e mode);
 static inline void RRA(cpu_s *cpu, addr_mode_e mode);
 
 static inline void update_flags(cpu_s *cpu);
-static void (*on_cpu_state_update)(cpu_state_s *, void *) = NULL;
+static void (*on_cpu_state_update)(const cpu_state_s *, void *) = NULL;
 static void *on_cpu_state_update_data = NULL;
 
 static void (*log_error)(const char *, ...) = NULL;
@@ -519,7 +519,7 @@ static void update_cpu_state(cpu_s *cpu) {
  * =============================================================================
  */
 
-void cpu_register_state_callback(void (*cpu_state_cb)(cpu_state_s *, void *),
+void cpu_register_state_callback(void (*cpu_state_cb)(const cpu_state_s *, void *),
                                  void *cpu_cb_data) {
   on_cpu_state_update = cpu_state_cb;
   on_cpu_state_update_data = cpu_cb_data;
@@ -594,16 +594,17 @@ int cpu_exec(cpu_s *cpu, char *e_context) {
   update_cpu_state(cpu);
   update_flags(cpu);
 #endif
-
+  /*
   if (cpu->to_nmi) {
     NMI(cpu);
-    } 
+    }
+  */
   /*
   else if (cpu->to_irq) {
     IRQ(cpu);
   }
   */
-
+  if (0) {}
   else {
     uint8_t opc = fetch8(cpu, cpu->pc++); /* 1 cycle */
     switch (opc) {

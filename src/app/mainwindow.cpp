@@ -44,14 +44,14 @@ void show_error(QWidget *parent, NESError &e) {
   QMessageBox::critical(parent, "Error", e.what());
 }
 
-void on_cpu_state_update(cpu_state_s *state, void *cb_forwarder) {
+void on_cpu_state_update(const cpu_state_s *state, void *cb_forwarder) {
   static NESCallbackForwarder *cbf =
       static_cast<NESCallbackForwarder *>(cb_forwarder);
   /* Not ideal but makes threads work */
   emit cbf->cpu_state_update(new cpu_state_s(*state));
 }
 
-void on_ppu_state_update(ppu_state_s *state, void *cb_forwarder) {
+void on_ppu_state_update(const ppu_state_s *state, void *cb_forwarder) {
   static NESCallbackForwarder *cbf =
       static_cast<NESCallbackForwarder *>(cb_forwarder);
   /* Not ideal but makes threads work */

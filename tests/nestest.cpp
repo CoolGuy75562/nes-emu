@@ -24,9 +24,9 @@
 
 #define NESTEST_LINES 8991
 
-static void log_cpu_nestest(cpu_state_s *cpu_state, void *data);
+static void log_cpu_nestest(const cpu_state_s *cpu_state, void *data);
 
-static void log_ppu_none(ppu_state_s *ppu_state, void *data) {}
+static void log_ppu_none(const ppu_state_s *ppu_state, void *data) {}
 static void log_memory_none(uint16_t addr, uint8_t val, void *data) {}
 static void log_none(const char *, ...) {}
 static void put_pixel(int i, int j, uint8_t palette_idx, void *data) {}
@@ -84,7 +84,7 @@ std::vector<std::string> nestest_log(void) {
 }
 
 
-static void log_cpu_nestest(cpu_state_s *cpu_state, void *data) {
+static void log_cpu_nestest(const cpu_state_s *cpu_state, void *data) {
   static char buf[256];
   static int line_num = 1;
   std::vector<std::string> *output_lines = static_cast<std::vector<std::string> *>(data);

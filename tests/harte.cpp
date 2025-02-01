@@ -6,9 +6,9 @@
 
 static void write_cycle(uint16_t addr, uint8_t val, void *data);
 static void fetch_cycle(uint16_t addr, uint8_t val, void *data);
-static void update_cpu_state(cpu_state_s *state, void* data);
+static void update_cpu_state(const cpu_state_s *state, void* data);
 static void error_none(const char *, ...) {}
-static void cpu_cb_none(cpu_state_s *, void *) {}
+static void cpu_cb_none(const cpu_state_s *, void *) {}
 static void memory_cb_none(uint16_t addr, uint8_t val, void* data) {}
 
 static char e_context[LEN_E_CONTEXT];
@@ -209,7 +209,7 @@ static void fetch_cycle(uint16_t addr, uint8_t val, void *data) {
   cycles->push_back(cycle(addr, val, 'r'));
 }
 
-static void update_cpu_state(cpu_state_s *state, void *data) {
+static void update_cpu_state(const cpu_state_s *state, void *data) {
   harte_case *hc_actual = static_cast<harte_case *>(data);
-  hc_actual->cpu_state = state;
+  hc_actual->cpu_state = (cpu_state_s *)state; /* don't worry not modified */
 }

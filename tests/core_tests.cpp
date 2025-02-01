@@ -28,8 +28,8 @@
 
 static void put_pixel(int, int, uint8_t, void *) {}
 static void cb_error_none(const char *format, ...) {}
-static void cb_ppu_none(ppu_state_s *ppu_state, void *data) {}
-static void cb_cpu_none(cpu_state_s *cpu_state, void *data) {}
+static void cb_ppu_none(const ppu_state_s *ppu_state, void *data) {}
+static void cb_cpu_none(const cpu_state_s *cpu_state, void *data) {}
 static void cb_memory_none(uint16_t addr, uint8_t val, void *data) {}
 
 BOOST_AUTO_TEST_SUITE(core_tests)
