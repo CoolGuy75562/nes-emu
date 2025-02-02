@@ -3,7 +3,9 @@
 
 void put_pixel(int i, int j, uint8_t palette_idx, void *screen) {
   static NESScreen *s = static_cast<NESScreen *>(screen);
-  int index = (nes_screen_width * i + j) * 3;
+  /* we have to draw top to bottom because opengl quad flips
+   * the texture */
+  int index = (nes_screen_width * (nes_screen_height - 1 - i) + j) * 3;
   palette_idx %= 64;
   palette_idx *= 3;
   

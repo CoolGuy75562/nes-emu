@@ -219,7 +219,7 @@ void ppu_step(ppu_s *ppu, uint8_t *to_nmi) {
     *to_nmi |= ppu->nmi_occurred;
   }
   
-  if (ppu->scanline < 256 && ppu->cycles < 240) {
+  if (ppu->scanline < 240 && ppu->cycles < 256) {
     render_pixel(ppu);
   }
   
@@ -534,7 +534,7 @@ static void background_step(ppu_s *ppu) {
     }
 
     else if (ppu->cycles <= 256) {
-      uint8_t offset = (ppu->cycles) % 8;
+      uint8_t offset = (ppu->cycles-1) % 8;
       tile_data_fetch(ppu, offset);
       if (offset == 7) {
         inc_hori_v(ppu);
@@ -553,7 +553,7 @@ static void background_step(ppu_s *ppu) {
     }
     
     else if (ppu->cycles < 337) {
-      uint8_t offset = (ppu->cycles) % 8;
+      uint8_t offset = (ppu->cycles-1) % 8;
       tile_data_fetch(ppu, offset);
       if (offset == 7) {
         inc_hori_v(ppu);
@@ -573,7 +573,7 @@ static void background_step(ppu_s *ppu) {
     }
 
     else if (ppu->cycles < 257) { 
-      uint8_t offset = (ppu->cycles) % 8;
+      uint8_t offset = (ppu->cycles-1) % 8;
       tile_data_fetch(ppu, offset);
       if (offset == 7) {
         inc_hori_v(ppu);
@@ -594,7 +594,7 @@ static void background_step(ppu_s *ppu) {
     }
 
     else {
-      uint8_t offset = (ppu->cycles) % 8;
+      uint8_t offset = (ppu->cycles-1) % 8;
       tile_data_fetch(ppu, offset);
       if (offset == 7) {
         inc_hori_v(ppu);
@@ -623,7 +623,7 @@ static void render_pixel(ppu_s *ppu) {
 
   uint8_t color_idx = (at_color_idx << 2) | ptt_color_idx;
   uint8_t palette_idx = memory_ppu[0x3F00 + color_idx];
-  put_pixel(ppu->cycles, ppu->scanline, palette_idx, put_pixel_data);
+  put_pixel(ppu->scanline, ppu->cycles, palette_idx, put_pixel_data);
 }
 
 static void increment_ppu(ppu_s *ppu) {
