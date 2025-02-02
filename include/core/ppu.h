@@ -73,10 +73,10 @@ int ppu_init(ppu_s **ppu,
 void ppu_destroy(ppu_s *ppu);
 
 /* returns the result of reading to memory-mapped register */
-uint8_t ppu_register_fetch(ppu_s *ppu, uint8_t regno);
+uint8_t ppu_register_fetch(ppu_s *ppu, uint16_t addr);
 
 /* deals with the internal effect fo writing to a ppu register */
-void ppu_register_write(ppu_s *ppu, uint8_t regno, uint8_t val, uint8_t *to_oamdma);
+void ppu_register_write(ppu_s *ppu, uint16_t addr, uint8_t val, uint8_t *to_oamdma);
 
 /* return 1 if nmi */
 uint8_t ppu_check_nmi(ppu_s *ppu);

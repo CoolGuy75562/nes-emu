@@ -241,54 +241,56 @@ static inline void update_nmi(ppu_s *ppu) {
          (ppu->ppustatus & MASK_PPUSTATUS_VBLANK);
 }
 
-uint8_t ppu_register_fetch(ppu_s *ppu, uint8_t regno) {
-  switch (regno) {
-  case 2:
-    return ppustatus_fetch(ppu);
-  case 4:
-    return oamdata_fetch(ppu);
-  case 7:
-    return ppudata_fetch(ppu);
-  default:
-    /* return data bus val for write only register */
-    return ppu->ppu_db;
+uint8_t ppu_register_fetch(ppu_s *ppu, uint16_t addr) {
+  switch (addr) {
+  case 0x2002:
+    ppu->ppu_db = ppustatus_fetch(ppu);
+    break;
+  case 0x2004:
+    ppu->ppu_db = oamdata_fetch(ppu);
+    break;
+  case 0x2007:
+    ppu->ppu_db = ppudata_fetch(ppu);
+    break;
   }
+  return ppu->ppu_db;
 }
 
-void ppu_register_write(ppu_s *ppu, uint8_t regno, uint8_t val, uint8_t *to_oamdma) {
-  switch (regno) {
-  case 0:
-    if (ppu->ready_to_write) {
+void ppu_register_write(ppu_s *ppu, uint16_t addr, uint8_t val, uint8_t *to_oamdma) {
+  switch (addr) {
+  case 0x2000:
+    //if (ppu->ready_to_write) {
       ppuctrl_write(ppu, val);
-      }
+      //  }
     break;
-  case 1:
-    if (ppu->ready_to_write) {
+  case 0x2001:
+    // if (ppu->ready_to_write) {
       ppumask_write(ppu, val);
-      }
+      //   }
       break;
-  case 2:
+  case 0x2002:
     ppu->ppu_db = val;
-  case 3:
+    break;
+  case 0x2003:
     oamaddr_write(ppu, val);
     break;
-  case 4:
+  case 0x2004:
     oamdata_write(ppu, val);
     break;
-  case 5:
-    if (ppu->ready_to_write) {
+  case 0x2005:
+    //   if (ppu->ready_to_write) {
       ppuscroll_write(ppu, val);
-      }
+      //    }
     break;
-  case 6:
-    if (ppu->ready_to_write) {
+  case 0x2006:
+    //   if (ppu->ready_to_write) {
       ppuaddr_write(ppu, val);
-      }
+      //    }
     break;
-  case 7:
+  case 0x2007:
     ppudata_write(ppu, val);
     break;
-  case 0x14:
+  case 0x4014:
     *to_oamdma = 1;
     oamdma_write(ppu, val);
     break;
@@ -362,30 +364,24 @@ static void ptt_high_byte_fetch(ppu_s *ppu) {
  * -----------------------*/
 
 static uint8_t ppustatus_fetch(ppu_s *ppu) {
-  ppu->w = 0;
   uint8_t val = (ppu->ppustatus & MASK_PPUSTATUS_ALL) |
                 (ppu->ppu_db & ~MASK_PPUSTATUS_ALL);
-  ppu->ppustatus &= ~MASK_PPUSTATUS_ALL; /* clear vblank flag */
+
+  ppu->w = 0;
+  ppu->ppustatus &= ~MASK_PPUSTATUS_VBLANK; /* clear vblank flag */
   update_nmi(ppu);
-  /* I think the only the bits read will change the data bus */
-  ppu->ppu_db = val;
   return val;
 }
 
-static uint8_t oamdata_fetch(ppu_s *ppu) {
-  uint8_t val = memory_oam[ppu->oamaddr];
-  ppu->ppu_db = val;
-  return val;
-}
+static uint8_t oamdata_fetch(ppu_s *ppu) { return  memory_oam[ppu->oamaddr]; }
 
 static uint8_t ppudata_fetch(ppu_s *ppu) {
+  uint8_t val = ppu->ppudata_rb;
+  ppu->ppudata_rb = memory_ppu[ppu->v & MASK_T_V_ADDR_ALL];
+  
   /* Increment VRAM address by 1 or 32, depending on PPUCTRL second bit */
   ppu->v += (ppu->ppuctrl & MASK_PPUCTRL_INCREMENT) ? 32 : 1;
 
-  /* Put current ppudata in read buffer and return prev. read buffer value */
-  uint8_t val = ppu->ppudata_rb;
-  ppu->ppudata_rb = memory_ppu[ppu->v & MASK_T_V_ADDR_ALL];
-  ppu->ppu_db = val;
   return val;
 }
 

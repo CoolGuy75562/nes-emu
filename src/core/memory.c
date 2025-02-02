@@ -294,43 +294,44 @@ uint8_t memory_fetch(uint16_t addr, uint8_t *to_nmi) {
   uint8_t val;
   uint16_t effective_addr;
   if (ppu == NULL) { /* no ppu mode */
-    val = memory_cpu[addr];
     effective_addr = addr;
+    val = memory_cpu[addr];
 
   } else {
+    /* cpu ram */
     if (addr < 0x2000) {
-      val = memory_cpu[addr % 0x800];
       effective_addr = addr % 0x800;
+      val = memory_cpu[effective_addr];
     }
 
+    /* ppu registers and mirrors */
     else if (addr < 0x4000) {
-      val = ppu_register_fetch(ppu, addr % 8);
       effective_addr = 0x2000 + (addr % 8);
+      val = ppu_register_fetch(ppu, effective_addr);
     }
 
-    else if (addr == 0x4014) {
-      val = ppu_register_fetch(ppu, 0x14);
+    /* api, i/o registers */
+    else if (addr < 0x4020) {
       effective_addr = addr;
+      val = memory_cpu[effective_addr];
     }
 
-    else if (addr < 0x4018) {
-      val = memory_cpu[addr];
-      effective_addr = addr;
-    }
-
+    /* prg rom */
     else if (addr < 0x8000) {
-      val = memory_cpu[addr];
       effective_addr = addr;
+      val = memory_cpu[effective_addr];
     }
 
+    /* mirror of prg rom if applicable */
     else if (addr < 0xC000 && header_data.prg_rom_size == 1) {
-      val = memory_cpu[addr + 0x4000];
       effective_addr = addr + 0x4000;
+      val = memory_cpu[effective_addr];
     }
 
+    /* rest of prg rom if not applicable */
     else {
-      val = memory_cpu[addr];
-      effective_addr = val;
+      effective_addr = addr;
+      val = memory_cpu[effective_addr];
     }
     do_three_ppu_steps(to_nmi);
   }
@@ -343,46 +344,53 @@ void memory_write(uint16_t addr, uint8_t val, uint8_t *to_oamdma,
 
   uint16_t effective_addr;
   if (ppu == NULL) { /* no ppu mode */
-    memory_cpu[addr] = val;
     effective_addr = addr;
+    memory_cpu[effective_addr] = val;
 
   } else {
     if (addr < 0x2000) {
       // memory_cpu[addr] = val;
-      memory_cpu[addr % 0x800] = val; /* mirroring */
       effective_addr = addr % 0x800;
+      memory_cpu[effective_addr] = val; /* mirroring */
     }
 
+    /* ppu register */
     else if (addr < 0x4000) {
-      ppu_register_write(ppu, addr % 8, val, to_oamdma);
       effective_addr = 0x2000 + (addr % 8);
+      ppu_register_write(ppu, effective_addr, val, to_oamdma);
     }
 
+    /* oamdma */
     else if (addr == 0x4014) {
-      ppu_register_write(ppu, 0x14, val, to_oamdma);
       effective_addr = addr;
+      ppu_register_write(ppu, effective_addr, val, to_oamdma);
     }
 
     else if (addr < 0x4020) {
-      memory_cpu[addr] = val;
       effective_addr = addr;
+      memory_cpu[effective_addr] = val;
     }
 
     else if (addr < 0x8000) {
-      memory_cpu[addr] = val;
       effective_addr = addr;
+      memory_cpu[effective_addr] = val;
     }
 
+    else {
+      effective_addr = addr;
+      val = 0;
+    }
+    /*
     else if (addr < 0xC000 && header_data.prg_rom_size == 1) {
-      memory_cpu[addr + 0x4000] = val;
       effective_addr = addr + 0x4000;
+      memory_cpu[effective_addr] = val;
     }
     
     else {
-      memory_cpu[addr] = val;
       effective_addr = addr;
+      memory_cpu[effective_addr] = val;
     }
-
+    */
     do_three_ppu_steps(to_nmi);
   }
   on_write(effective_addr, val, on_write_data);

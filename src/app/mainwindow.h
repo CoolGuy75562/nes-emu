@@ -1,17 +1,25 @@
 #ifndef MAINWINDOW_H
 #define MAINWINDOW_H
 
-#include "core/cppwrapper.hpp"
 #include "nescontext.h"
-#include <QAbstractTableModel>
+#include "nestablemodel.h"
+
 #include <QMainWindow>
 
 void show_error(QWidget *parent, NESError &e);
 
-namespace Ui {
-class MainWindow;
-}
+struct cycle {
+  cycle(uint16_t addr, uint8_t val, char r_or_w)
+      : addr(addr), val(val), r_or_w(r_or_w) {}
+  cycle(const cycle &other)
+      : addr(other.addr), val(other.val), r_or_w(other.r_or_w) {}
+  cycle() : addr(0), val(0), r_or_w('0') {}
+  uint16_t addr;
+  uint8_t val;
+  char r_or_w;
+};
 
+/*============================================================*/
 /* this class sends signals with the arguments of the cpu, ppu, memory callbacks
    in the nes thread to the memory, cpu, ppu models in the gui thread. */
 class NESCallbackForwarder : public QObject {
@@ -22,49 +30,14 @@ public:
   explicit NESCallbackForwarder(QObject *parent = nullptr) : QObject(parent) {}
 
 signals:
-  void cpu_state_update(cpu_state_s *state);
-  void ppu_state_update(ppu_state_s *state);
-  void memory_update(uint16_t addr, uint8_t val, char r_or_w);
+  void cpu_state_update(cpu_state_s);
+  void ppu_state_update(ppu_state_s);
+  void memory_update(cycle);
 };
 
-/* Base class for cpu, ppu, memory models which go in the cpu, ppu, memory table
- * views in the main window.
- *
- * Only difference in the child classes is the kind of data to be inserted:
- * cpu_state_s, ppu_state_s, or memory stuff.
- */
-class NESTableModel : public QAbstractTableModel {
+/*============================================================*/
 
-  Q_OBJECT
-
-public:
-  NESTableModel(int rows, int cols, QStringList header_labels,
-                QWidget *parent = nullptr);
-
-  int rowCount(const QModelIndex &parent) const override;
-  int columnCount(const QModelIndex &parent) const override;
-  QVariant data(const QModelIndex &index, int role) const override;
-  QVariant headerData(int section, Qt::Orientation orientation,
-                      int role = Qt::DisplayRole) const override;
-
-public slots:
-  void nes_started();
-  void nes_stopped();
-  
-protected:
-  void add_state_strings(QStringList &state_strings);
-  void add_state_strings_buffered(QStringList &state_strings);
-
-  bool nes_running;
-  const int rows, cols;
-  const QStringList header_labels;
-  QList<QStringList> table_data;
-
-private:
-  int last_model_update;
-};
-
-class CPUTableModel : public NESTableModel {
+class CPUTableModel : public NESTableModel<cpu_state_s> {
 
   Q_OBJECT
 
@@ -72,14 +45,21 @@ public:
   explicit CPUTableModel(QWidget *parent = nullptr);
 
 public slots:
-  void addState(cpu_state_s *cpu_state);
-
+  void nes_started();
+  void nes_stopped();
+  void addState(cpu_state_s);
+  
+protected:
+  QVariant indexToQString(const QModelIndex &index) const override;
+  
 private:
   static const int rows, cols;
   static const QStringList header_labels;
 };
 
-class PPUTableModel : public NESTableModel {
+/*============================================================*/
+
+class PPUTableModel : public NESTableModel<ppu_state_s> {
 
   Q_OBJECT
 
@@ -87,14 +67,21 @@ public:
   explicit PPUTableModel(QWidget *parent = nullptr);
 
 public slots:
-  void addState(ppu_state_s *ppu_state);
-
+  void nes_started();
+  void nes_stopped();
+  void addState(ppu_state_s);
+  
+protected:
+  QVariant indexToQString(const QModelIndex &index) const override;
+  
 private:
   static const int rows, cols;
   static const QStringList header_labels;
 };
 
-class MemoryTableModel : public NESTableModel {
+/*============================================================*/
+
+class MemoryTableModel : public NESTableModel<cycle> {
 
   Q_OBJECT
 
@@ -102,12 +89,23 @@ public:
   explicit MemoryTableModel(QWidget *parent = nullptr);
 
 public slots:
-  void addState(uint16_t addr, uint8_t val, char r_or_w);
+  void nes_started();
+  void nes_stopped();
+  void addState(cycle);
+  
+protected:
+  QVariant indexToQString(const QModelIndex &index) const override;
 
 private:
   static const int rows, cols;
   static const QStringList header_labels;
 };
+
+/*============================================================*/
+
+namespace Ui {
+class MainWindow;
+}
 
 /* Main window that everything goes in, namely
  * table views for memory, cpu, ppu data, buttons to start/stop/step
