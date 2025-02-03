@@ -204,9 +204,6 @@ void ppu_destroy(ppu_s *ppu) { free(ppu); }
 
 void ppu_step(ppu_s *ppu, uint8_t *to_nmi) {
 
-  if (ppu->scanline < 240 && ppu->cycles < 256) {
-    render_pixel(ppu);
-  }
   /* ppuctrl write could have set nmi */
   *to_nmi |= ppu->nmi_occurred;
 
@@ -225,7 +222,10 @@ void ppu_step(ppu_s *ppu, uint8_t *to_nmi) {
     update_nmi(ppu);
     *to_nmi |= ppu->nmi_occurred;
   }
-  
+
+  if (ppu->scanline < 240 && ppu->cycles < 256) {
+    render_pixel(ppu);
+  }
   increment_ppu(ppu);
   ppu->total_cycles++;
   if (!ppu->ready_to_write && ppu->total_cycles > 3 * IGNORE_REG_WRITE_CYCLES) {
@@ -606,18 +606,18 @@ static void background_step(ppu_s *ppu) {
 static void sprite_step(ppu_s *ppu) {}
 
 static void render_pixel(ppu_s *ppu) {
-
+  uint8_t i = ppu->cycles % 8;
+  
   uint8_t tile_x = ppu->v & MASK_T_V_COARSE_X;
   uint8_t tile_y = ppu->v & MASK_T_V_COARSE_Y >> 5;
 
-  uint8_t tile_x_quad_select = (tile_x & 2) >> 1;
-  uint8_t tile_y_quad_select = (tile_y & 2) >> 1;
+  uint8_t tile_x_quad_select = (tile_x / 2) % 2;
+  uint8_t tile_y_quad_select = (tile_y / 2) % 2;
   /* double check this */
   uint8_t at_color_idx =
-      (ppu->at_shift >>
-       (((tile_x_quad_select << 1) | tile_y_quad_select) << 2)) & 3;
-
-  uint8_t i = ppu->cycles % 8;
+    (ppu->at_shift >>
+       (((tile_x_quad_select) | tile_y_quad_select) << 1)) & 3;
+  
   uint8_t ptt_color_idx = // looks right
       (((ppu->ptt_shift_high >> i) & 1) << 1) | ((ppu->ptt_shift_low >> i) & 1);
 

@@ -130,8 +130,8 @@ signals:
   void step_button_clicked();
 
 private:
-  void init_table_view(std::string which);
-
+  void show_hexdump_dialog(const char *dump_data);
+  
   Ui::MainWindow *ui;
   CPUTableModel *cpu_model;
   PPUTableModel *ppu_model;
@@ -146,6 +146,7 @@ private slots:
   void on_playButton_clicked();
   void on_stepButton_clicked();
   void on_memoryDumpButton_clicked();
+  void on_VRAMDumpButton_clicked();
 };
 
 #endif // MAINWINDOW_H

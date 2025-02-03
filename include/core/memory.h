@@ -40,9 +40,6 @@ void memory_unregister_cb(memory_cb_e cb_type);
  */
 int memory_init(const char *rom_filename, ppu_s *p, char *e_context);
 
-/* Returns ($FFFC) */
-uint16_t memory_init_cpu_pc(void);
-
 /* return value from addr of cpu memory, or result of reading
  * ppu memory-mapped register if addr corresponds to one.
  *
@@ -76,17 +73,22 @@ void memory_write(uint16_t addr, uint8_t val, uint8_t *oamdma, uint8_t *to_nmi);
 void memory_do_oamdma(uint8_t val, uint16_t *cycles, uint8_t *to_nmi);
 
 /* dump ines header information to file */
-void ines_header_dump(void);
+/* void ines_header_dump(void); */
 
 /* hexdump cpu memory contents to file */
 int memory_dump_file(FILE *fp);
 
-/* hexdump memory contents to string dump
+/* hexdump memory contents to string
  *
- * return -1 if dump_len was not long enough,
- * 0 otherwise 
+ * return <0 if error, 0 otherwise 
  */
 int memory_dump_string(char *dump, size_t dump_len);
+
+/* hexdump vram contents to string
+ *
+ * return <0 if error, 0 otherwise
+ */
+int memory_vram_dump_string(char *dump, size_t dump_len);
 
 /* Initialises memory to addrs and vals */
 void memory_init_harte_test_case(const uint16_t *addrs, const uint8_t *vals, size_t length);

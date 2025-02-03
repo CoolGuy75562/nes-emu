@@ -352,26 +352,41 @@ void MainWindow::on_stepButton_clicked() { emit step_button_clicked(); }
 /* Double check this is ok with threads */
 void MainWindow::on_memoryDumpButton_clicked() {
   emit pause_button_clicked();
-  QDialog memory_dump_dialog(this);
-
-  QPlainTextEdit *memory_dump_text_view =
-      new QPlainTextEdit(&memory_dump_dialog);
-  memory_dump_text_view->setReadOnly(true);
   char dump_data[1 << 19];
   size_t dump_len = 1 << 19;
   if (memory_dump_string(dump_data, dump_len) < 0) {
     qDebug() << "Memory dump didn't work";
-  } else {
-    memory_dump_text_view->setLineWrapMode(QPlainTextEdit::NoWrap);
-    memory_dump_text_view->setPlainText(dump_data);
-    memory_dump_text_view->setFont(QFont("Monospace"));
-    // memory_dump_text_view->setFixedWidth(memory_dump_text_view->document()->size().width()
-    // + 10);
+    return;
   }
 
-  QBoxLayout memory_dump_dialog_layout(QBoxLayout::TopToBottom);
-  memory_dump_dialog_layout.addWidget(memory_dump_text_view);
-
-  memory_dump_dialog.setLayout(&memory_dump_dialog_layout);
-  memory_dump_dialog.exec();
+  show_hexdump_dialog(dump_data);
 }
+
+void MainWindow::on_VRAMDumpButton_clicked() {
+  emit pause_button_clicked();
+  char dump_data[1 << 18];
+  size_t dump_len = 1 << 18;
+  if (memory_vram_dump_string(dump_data, dump_len) < 0) {
+    qDebug() << "VRAM dump didn't work";
+    return;
+  }
+  
+  show_hexdump_dialog(dump_data);
+}
+
+void MainWindow::show_hexdump_dialog(const char *dump_data) {
+  QDialog hexdump_dialog(this);
+  QPlainTextEdit *hexdump_text_view = new QPlainTextEdit(&hexdump_dialog);
+
+  hexdump_text_view->setReadOnly(true);
+  hexdump_text_view->setLineWrapMode(QPlainTextEdit::NoWrap);
+  hexdump_text_view->setPlainText(dump_data);
+  hexdump_text_view->setFont(QFont("Monospace"));
+
+  QBoxLayout hexdump_dialog_layout(QBoxLayout::TopToBottom);
+  hexdump_dialog_layout.addWidget(hexdump_text_view);
+  hexdump_dialog.setLayout(&hexdump_dialog_layout);
+
+  hexdump_dialog.exec();
+}
+  

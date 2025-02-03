@@ -252,6 +252,45 @@ int memory_dump_string(char *dump, size_t dump_len) {
   *dump = '\0';
   return E_NO_ERROR;
 }
+
+int memory_vram_dump_string(char *dump, size_t dump_len) {
+  if (dump == NULL) {
+    return -E_NO_STRING;
+  }
+  char buf[2048];
+  size_t offset, read = 0;
+  size_t i, j;
+  char c;
+
+  /* What if sprintf returns negative? */
+  for (i = 0; i < 0x400; i++) {
+    offset = 0;
+    offset += sprintf(buf + offset, "%3x0: ", (unsigned)i);
+    for (j = 0; j < 0x10; j++) {
+      offset += sprintf(buf + offset, "%2x ", memory_ppu[0x10 * i + j]);
+    }
+    offset += sprintf(buf + offset, "|");
+    for (j = 0; j < 0x10; j++) {
+      c = memory_ppu[0x10 * i + j];
+      if (c == 0 || !isprint(c)) {
+        offset += sprintf(buf + offset, ".");
+      } else {
+        offset += sprintf(buf + offset, "%c", c);
+      }
+    }
+    offset += sprintf(buf + offset, "|\n");
+
+    read += offset;
+    if (read > dump_len) {
+      return -E_BUF_SIZE;
+    } else {
+      strncpy(dump, buf, offset);
+      dump += offset;
+    }
+  }
+  *dump = '\0';
+  return E_NO_ERROR;
+}
 /*
 void ines_header_dump(void) {
   FILE *fp;

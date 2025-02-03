@@ -29,7 +29,7 @@ public:
                       int role = Qt::DisplayRole) const override;
 protected:
   virtual QVariant indexToQString(const QModelIndex &index) const = 0;
-  void addState(T);
+  void addState(T&);
   void nes_started();
   void nes_stopped();
 
@@ -105,7 +105,7 @@ QVariant NESTableModel<T>::headerData(int section, Qt::Orientation orientation,
 }
 
 template <typename T>
-void NESTableModel<T>::addState(T thing) {
+void NESTableModel<T>::addState(T &thing) {
   table_data[++table_data_start_idx & (rows - 1)] = thing;
   if (nes_running) {
     if (last_model_update <= 0) {
