@@ -147,6 +147,7 @@ private slots:
   void on_stepButton_clicked();
   void on_memoryDumpButton_clicked();
   void on_VRAMDumpButton_clicked();
+  void on_patternTableButton_clicked();
 };
 
 #endif // MAINWINDOW_H

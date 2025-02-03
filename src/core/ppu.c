@@ -47,10 +47,10 @@
 #define MASK_T_V_COARSE_Y 0x3E0
 #define MASK_T_V_NAMETABLE 0xC00
 #define MASK_T_V_FINE_Y 0x7000
-#define MASK_T_V_ADDR_ALL 0x3FFF /* 0011111111111111 */
+#define MASK_T_V_ADDR_ALL 0x3FFF   /* 0011111111111111 */
 #define MASK_T_V_SCROLL_ALL 0x7FFF /* 0111111111111111 */
-#define MASK_T_V_HORI 0x41F /* ....N.....XXXXX */
-#define MASK_T_V_VERT 0x7BE0 /* YYYN.YYYYY..... */
+#define MASK_T_V_HORI 0x41F        /* ....N.....XXXXX */
+#define MASK_T_V_VERT 0x7BE0       /* YYYN.YYYYY..... */
 #define MASK_PPUSCROLL_FINE 0x7
 
 #define IGNORE_REG_WRITE_CYCLES 29657
@@ -96,7 +96,7 @@ typedef struct ppu_s {
   uint16_t at_shift;
   uint16_t ptt_shift_low;
   uint16_t ptt_shift_high;
-  
+
   /* other things to keep track of */
   uint16_t cycles;
   uint16_t scanline;
@@ -112,7 +112,7 @@ static void state_init(ppu_s *ppu);
 static void state_update(ppu_s *ppu);
 
 static void increment_ppu(ppu_s *ppu);
-static inline void  update_nmi(ppu_s *ppu);
+static inline void update_nmi(ppu_s *ppu);
 static void background_step(ppu_s *ppu);
 static void sprite_step(ppu_s *ppu);
 static void tile_data_fetch(ppu_s *ppu, uint8_t offset);
@@ -144,7 +144,8 @@ static uint8_t memory_secondary_oam[32] = {0};
 
 /* callbacks */
 static void (*log_error)(const char *, ...) = NULL;
-static void (*on_ppu_state_update)(const ppu_state_s *ppu_state, void *data) = NULL;
+static void (*on_ppu_state_update)(const ppu_state_s *ppu_state,
+                                   void *data) = NULL;
 static void (*put_pixel)(int i, int j, uint8_t palette_idx, void *data) = NULL;
 static uint8_t (*vram_fetch)(uint16_t addr, void *data);
 static void (*vram_write)(uint16_t addr, uint8_t val, void *data);
@@ -156,7 +157,38 @@ static void *vram_fetch_data = NULL;
 static void *vram_write_data = NULL;
 
 /*----------------------------------------------------------------------------*/
-void ppu_register_state_callback(void (*ppu_state_cb)(const ppu_state_s *, void *),
+
+void ppu_draw_pattern_table(uint8_t is_right,
+                            void (*put_pixel)(int, int, uint8_t, void *),
+                            void *data) {
+  for (uint16_t tile_y = 0; tile_y < 0x10; tile_y++) {
+    for (uint16_t tile_x = 0; tile_x < 0x10; tile_x++) {
+      uint16_t tile_offset =
+          tile_y * 0x100 + tile_x * 0x10; // offset into next tile
+      for (uint8_t row = 0; row < 8; row++) {
+
+        uint8_t tile_low =
+            vram_fetch(is_right * 0x1000 + tile_offset + row, vram_fetch_data);
+        uint8_t tile_high = vram_fetch(
+            is_right * 0x1000 + tile_offset + row + 8, vram_fetch_data);
+
+        for (uint8_t col = 0; col < 8; col++) {
+
+	  uint8_t palette_idx = 0x3F00 + (((tile_low & 1) << 1) | (tile_high & 1));
+	  tile_low >>= 1; tile_high >>=1;
+
+          put_pixel(tile_y * 8 + row,
+                    tile_x * 8 + (7 - col),
+                    palette_idx,
+                    data);
+	}
+      }
+    }
+  }
+}
+
+void ppu_register_state_callback(void (*ppu_state_cb)(const ppu_state_s *,
+                                                      void *),
                                  void *data) {
   on_ppu_state_update = ppu_state_cb;
   on_ppu_state_update_data = data;
@@ -182,7 +214,7 @@ void ppu_register_vram_write_callback(void (*callback)(uint16_t, uint8_t,
   vram_write = callback;
   vram_write_data = data;
 }
-  
+
 int ppu_init(ppu_s **p, void (*put_pixel_cb)(int, int, uint8_t, void *),
              void *data) {
   put_pixel = put_pixel_cb;
@@ -196,7 +228,7 @@ int ppu_init(ppu_s **p, void (*put_pixel_cb)(int, int, uint8_t, void *),
   ppu_s *ppu = *p;
   ppu->ppustatus = 0xA0;
   state_init(ppu);
-  //on_ppu_state_update(&ppu_state, on_ppu_state_update_data);
+  // on_ppu_state_update(&ppu_state, on_ppu_state_update_data);
   return E_NO_ERROR;
 }
 
@@ -208,9 +240,10 @@ void ppu_step(ppu_s *ppu, uint8_t *to_nmi) {
   *to_nmi |= ppu->nmi_occurred;
 
   /* if rendering enabled */
-  if ((ppu->ppumask & MASK_PPUMASK_BG_R_ENABLE) || (ppu->ppumask & MASK_PPUMASK_SPRITE_R_ENABLE)) {
+  if ((ppu->ppumask & MASK_PPUMASK_BG_R_ENABLE) ||
+      (ppu->ppumask & MASK_PPUMASK_SPRITE_R_ENABLE)) {
     background_step(ppu);
-    sprite_step(ppu); 
+    sprite_step(ppu);
   }
   if (ppu->scanline == 241 && ppu->cycles == 1) {
     ppu->ppustatus |= MASK_PPUSTATUS_VBLANK;
@@ -241,7 +274,7 @@ void ppu_step(ppu_s *ppu, uint8_t *to_nmi) {
 
 static inline void update_nmi(ppu_s *ppu) {
   ppu->nmi_occurred = (ppu->ppuctrl & MASK_PPUCTRL_NMI_ENABLE) &&
-         (ppu->ppustatus & MASK_PPUSTATUS_VBLANK);
+                      (ppu->ppustatus & MASK_PPUSTATUS_VBLANK);
 }
 
 uint8_t ppu_register_fetch(ppu_s *ppu, uint16_t addr) {
@@ -259,18 +292,19 @@ uint8_t ppu_register_fetch(ppu_s *ppu, uint16_t addr) {
   return ppu->ppu_db;
 }
 
-void ppu_register_write(ppu_s *ppu, uint16_t addr, uint8_t val, uint8_t *to_oamdma) {
+void ppu_register_write(ppu_s *ppu, uint16_t addr, uint8_t val,
+                        uint8_t *to_oamdma) {
   switch (addr) {
   case 0x2000:
-    //if (ppu->ready_to_write) {
-      ppuctrl_write(ppu, val);
-      //  }
+    // if (ppu->ready_to_write) {
+    ppuctrl_write(ppu, val);
+    //  }
     break;
   case 0x2001:
     // if (ppu->ready_to_write) {
-      ppumask_write(ppu, val);
-      //   }
-      break;
+    ppumask_write(ppu, val);
+    //   }
+    break;
   case 0x2002:
     ppu->ppu_db = val;
     break;
@@ -282,13 +316,13 @@ void ppu_register_write(ppu_s *ppu, uint16_t addr, uint8_t val, uint8_t *to_oamd
     break;
   case 0x2005:
     //   if (ppu->ready_to_write) {
-      ppuscroll_write(ppu, val);
-      //    }
+    ppuscroll_write(ppu, val);
+    //    }
     break;
   case 0x2006:
     //   if (ppu->ready_to_write) {
-      ppuaddr_write(ppu, val);
-      //    }
+    ppuaddr_write(ppu, val);
+    //    }
     break;
   case 0x2007:
     ppudata_write(ppu, val);
@@ -300,9 +334,7 @@ void ppu_register_write(ppu_s *ppu, uint16_t addr, uint8_t val, uint8_t *to_oamd
   }
 }
 
-static void state_init(ppu_s *ppu) {
-  state_update(ppu);
-}
+static void state_init(ppu_s *ppu) { state_update(ppu); }
 
 /* will be slow if call often... */
 static void state_update(ppu_s *ppu) {
@@ -373,25 +405,26 @@ static uint8_t ppustatus_fetch(ppu_s *ppu) {
   return val;
 }
 
-static uint8_t oamdata_fetch(ppu_s *ppu) { return  memory_oam[ppu->oamaddr]; }
+static uint8_t oamdata_fetch(ppu_s *ppu) { return memory_oam[ppu->oamaddr]; }
 
 static uint8_t ppudata_fetch(ppu_s *ppu) {
   uint8_t val = ppu->ppudata_rb;
   ppu->ppudata_rb = vram_fetch(ppu->v & MASK_T_V_ADDR_ALL, vram_fetch_data);
-  
+
   /* Increment VRAM address by 1 or 32, depending on PPUCTRL second bit */
   ppu->v += (ppu->ppuctrl & MASK_PPUCTRL_INCREMENT) ? 32 : 1;
 
   return val;
 }
 
-/*=============================Register Writes=================================*/
+/*=============================Register
+ * Writes=================================*/
 
 static void ppuctrl_write(ppu_s *ppu, uint8_t val) {
   ppu->ppuctrl = val;
   /* ppuctrl = ......GH -> t = ... GH ..... ..... */
   ppu->t = /* double checked, this is right */
-    (ppu->t & ~MASK_T_V_NAMETABLE) | ((val & MASK_PPUCTRL_NAMETABLE) << 10);
+      (ppu->t & ~MASK_T_V_NAMETABLE) | ((val & MASK_PPUCTRL_NAMETABLE) << 10);
   update_nmi(ppu);
   ppu->ppu_db = val;
 }
@@ -457,9 +490,7 @@ static void ppudata_write(ppu_s *ppu, uint8_t val) {
   ppu->ppu_db = val;
 }
 
-static void oamdma_write(ppu_s *ppu, uint8_t val) {
-  ppu->oamdma = val;
-}
+static void oamdma_write(ppu_s *ppu, uint8_t val) { ppu->oamdma = val; }
 
 /*-------------------------rendering helper functions-----------------------*/
 
@@ -534,26 +565,26 @@ static void background_step(ppu_s *ppu) {
     }
 
     else if (ppu->cycles <= 256) {
-      uint8_t offset = (ppu->cycles-1) % 8;
+      uint8_t offset = (ppu->cycles - 1) % 8;
       tile_data_fetch(ppu, offset);
       if (offset == 7) {
         inc_hori_v(ppu);
         if (ppu->cycles == 256) {
           inc_vert_v(ppu);
-	}
+        }
       }
     }
-    
-    else  if (ppu->cycles == 257) {
-        copy_hori_v_t(ppu);
+
+    else if (ppu->cycles == 257) {
+      copy_hori_v_t(ppu);
     }
 
     else if (ppu->cycles < 321) {
       /* sprite stuff happens */
     }
-    
+
     else if (ppu->cycles < 337) {
-      uint8_t offset = (ppu->cycles-1) % 8;
+      uint8_t offset = (ppu->cycles - 1) % 8;
       tile_data_fetch(ppu, offset);
       if (offset == 7) {
         inc_hori_v(ppu);
@@ -572,14 +603,14 @@ static void background_step(ppu_s *ppu) {
       /* do nothing */
     }
 
-    else if (ppu->cycles < 257) { 
-      uint8_t offset = (ppu->cycles-1) % 8;
+    else if (ppu->cycles < 257) {
+      uint8_t offset = (ppu->cycles - 1) % 8;
       tile_data_fetch(ppu, offset);
       if (offset == 7) {
         inc_hori_v(ppu);
         if (ppu->cycles == 256) {
-	  inc_vert_v(ppu);
-	}
+          inc_vert_v(ppu);
+        }
       }
     }
 
@@ -594,7 +625,7 @@ static void background_step(ppu_s *ppu) {
     }
 
     else {
-      uint8_t offset = (ppu->cycles-1) % 8;
+      uint8_t offset = (ppu->cycles - 1) % 8;
       tile_data_fetch(ppu, offset);
       if (offset == 7) {
         inc_hori_v(ppu);
@@ -607,7 +638,7 @@ static void sprite_step(ppu_s *ppu) {}
 
 static void render_pixel(ppu_s *ppu) {
   uint8_t i = ppu->cycles % 8;
-  
+
   uint8_t tile_x = ppu->v & MASK_T_V_COARSE_X;
   uint8_t tile_y = ppu->v & MASK_T_V_COARSE_Y >> 5;
 
@@ -615,9 +646,8 @@ static void render_pixel(ppu_s *ppu) {
   uint8_t tile_y_quad_select = (tile_y / 2) % 2;
   /* double check this */
   uint8_t at_color_idx =
-    (ppu->at_shift >>
-       (((tile_x_quad_select) | tile_y_quad_select) << 1)) & 3;
-  
+      (ppu->at_shift >> (((tile_x_quad_select) | tile_y_quad_select) << 1)) & 3;
+
   uint8_t ptt_color_idx = // looks right
       (((ppu->ptt_shift_high >> i) & 1) << 1) | ((ppu->ptt_shift_low >> i) & 1);
 

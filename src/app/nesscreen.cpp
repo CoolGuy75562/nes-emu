@@ -1,23 +1,13 @@
+extern "C" {
+#include "core/ppu.h"
+}
 #include "nesscreen.h"
 #include <QtDebug>
+#include <QPainter>
 
-void put_pixel(int i, int j, uint8_t palette_idx, void *screen) {
-  static NESScreen *s = static_cast<NESScreen *>(screen);
-  /* we have to draw top to bottom because opengl quad flips
-   * the texture */
-  int index = (nes_screen_width * (nes_screen_height - 1 - i) + j) * 3;
-  palette_idx %= 64;
-  palette_idx *= 3;
-  
-  s->pbuf.at(index) = NESScreen::palette[palette_idx];
-  s->pbuf.at(index + 1) = NESScreen::palette[palette_idx + 1];
-  s->pbuf.at(index + 2) = NESScreen::palette[palette_idx + 2];
-  if (index + 2 == nes_screen_size - 1) {
-    s->emit pbuf_full();
-  }
-}
+const auto palette_size = 64;
 
-const uint8_t NESScreen::palette[3 * PALETTE_SIZE] = {
+const uint8_t palette[3 * palette_size] = {
     0x62, 0x62, 0x62, 0x01, 0x20, 0x90, 0x24, 0x0b, 0xa0, 0x47, 0x00, 0x90,
     0x60, 0x00, 0x62, 0x6a, 0x00, 0x24, 0x60, 0x11, 0x00, 0x47, 0x27, 0x00,
     0x24, 0x3c, 0x00, 0x01, 0x4a, 0x00, 0x00, 0x4f, 0x00, 0x00, 0x47, 0x24,
@@ -35,6 +25,48 @@ const uint8_t NESScreen::palette[3 * PALETTE_SIZE] = {
     0xe6, 0xe3, 0x97, 0xd1, 0xee, 0x97, 0xbf, 0xf3, 0xa9, 0xb5, 0xf2, 0xc9,
     0xb5, 0xeb, 0xee, 0xb8, 0xb8, 0xb8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 
+
+void put_pixel(int i, int j, uint8_t palette_idx, void *screen) {
+  static NESScreen *s = static_cast<NESScreen *>(screen);
+  /* we have to draw top to bottom because opengl quad flips
+   * the texture */
+  int index = (nes_screen_width * (nes_screen_height - 1 - i) + j) * 3;
+  palette_idx %= 64;
+  palette_idx *= 3;
+  
+  s->pbuf.at(index) = palette[palette_idx];
+  s->pbuf.at(index + 1) = palette[palette_idx + 1];
+  s->pbuf.at(index + 2) = palette[palette_idx + 2];
+  if (index + 2 == nes_screen_size - 1) {
+    s->emit pbuf_full();
+  }
+}
+
+void pt_put_pixel(int y, int x, uint8_t palette_idx, void *pt_viewer) {
+  // this is used by two different PatternTableVewiers so no static
+  PatternTableViewer *viewer =
+      static_cast<PatternTableViewer *>(pt_viewer);
+  int index = (pattern_table_width * y + x) * 3;
+  palette_idx %= 64;
+
+  /*
+  if (palette_idx == 0) {
+    palette_idx = 0x3D;
+  } else if (palette_idx == 1) {
+    palette_idx = 0x2D;
+  } else if (palette_idx == 2) {
+    palette_idx = 0x0E;
+  } else {
+    qDebug() << "palette_idx = " << palette_idx;
+  }
+  */
+  palette_idx *= 3;
+  
+  viewer->pbuf.at(index) = palette[palette_idx];
+  viewer->pbuf.at(index + 1) = palette[palette_idx + 1];
+  viewer->pbuf.at(index + 2) = palette[palette_idx + 2];
+}
+
 NESScreen::NESScreen(QObject *parent) : QObject(parent) {
   pbuf.fill(0);
 }
@@ -45,4 +77,28 @@ void (*NESScreen::get_put_pixel(void))(int, int, uint8_t, void *) {
 
 std::array<uint8_t, nes_screen_size> *NESScreen::getPBufPtr() {
   return &pbuf;
+}
+
+
+PatternTableViewer::PatternTableViewer(uint8_t is_right, QWidget *parent)
+    : QWidget(parent), is_right(is_right) {
+}
+
+void PatternTableViewer::draw_pattern_table(void) {
+  ppu_draw_pattern_table(is_right, &pt_put_pixel, this);
+  update();
+}
+
+void PatternTableViewer::paintEvent(QPaintEvent *event) {
+  // now draw pattern table to widget
+  Q_UNUSED(event);
+  if (pbuf.data() == nullptr) {
+    return;
+  }
+  QImage pattern_table(pbuf.data(), pattern_table_width, pattern_table_height,
+                       QImage::Format_RGB888);
+  QPainter painter;
+  painter.begin(this);
+  painter.drawImage(rect(), pattern_table);
+  painter.end();
 }

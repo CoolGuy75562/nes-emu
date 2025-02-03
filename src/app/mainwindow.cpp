@@ -374,6 +374,27 @@ void MainWindow::on_VRAMDumpButton_clicked() {
   show_hexdump_dialog(dump_data);
 }
 
+void MainWindow::on_patternTableButton_clicked() {
+  emit pause_button_clicked();
+  QDialog pattern_table_dialog(this);
+
+  PatternTableViewer *left_pt_viewer =
+      new PatternTableViewer(0, &pattern_table_dialog);
+  left_pt_viewer->setMinimumSize(256, 256);
+  left_pt_viewer->draw_pattern_table();
+  PatternTableViewer *right_pt_viewer =
+      new PatternTableViewer(1, &pattern_table_dialog);
+  right_pt_viewer->setMinimumSize(256, 256);
+  right_pt_viewer->draw_pattern_table();
+  
+  QBoxLayout pattern_table_dialog_layout(QBoxLayout::LeftToRight);
+  pattern_table_dialog_layout.addWidget(left_pt_viewer);
+  pattern_table_dialog_layout.addWidget(right_pt_viewer);
+  pattern_table_dialog.setLayout(&pattern_table_dialog_layout);
+
+  pattern_table_dialog.exec();
+}
+
 void MainWindow::show_hexdump_dialog(const char *dump_data) {
   QDialog hexdump_dialog(this);
   QPlainTextEdit *hexdump_text_view = new QPlainTextEdit(&hexdump_dialog);

@@ -67,7 +67,9 @@ int ppu_init(ppu_s **ppu,
 /* deallocate memory allocated to ppu with ppu_init */
 void ppu_destroy(ppu_s *ppu);
 
-
+void ppu_draw_pattern_table(uint8_t is_right,
+                            void (*put_pixel)(int, int, uint8_t, void *),
+			    void *data);
 /*============================================================*/
 /* These functions are only used in memory.c so probably deserve
  * their own header. */
