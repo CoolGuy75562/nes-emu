@@ -574,11 +574,16 @@ int cpu_init(cpu_s **p_cpu, uint8_t nestest) {
   cpu->to_irq = 0;
   cpu->to_nmi = 0;
   cpu->in_nmi = 0;
-  
+
   if (!nestest) {
-    cpu->pc = memory_init_cpu_pc(); /* PC = ($FFFC) */
-    cpu->cycles = 2;
-    JMP(cpu, ABS);
+    cpu->cycles = 0;
+    cpu->pc = fetch16(cpu, 0xFFFC);
+
+    // The two lines that broke everything:
+    /*=================================================*/
+    /* cpu->pc = memory_init_cpu_pc();                 */
+    /* JMP(cpu, ABS);                                  */
+    /*=================================================*/
   } else {
     cpu->pc = 0xC000;
     cpu->cycles = 7;

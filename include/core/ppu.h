@@ -40,10 +40,6 @@ typedef struct ppu_state_s {
   uint8_t at_byte;
   uint8_t ptt_low;
   uint8_t ptt_high;
-  /* memory */
-  uint8_t (*memory_ppu)[0x4000];
-  uint8_t (*memory_oam)[0x100];
-  uint8_t (*memory_secondary_oam)[32];
 } ppu_state_s;
 
 /* Do not call cpu_exec() after unregistering a callback! */
@@ -61,7 +57,6 @@ void ppu_unregister_state_callback(void);
 void ppu_register_error_callback(void (*log_error_cb)(const char *, ...));
 void ppu_unregister_error_callback(void);
 
-void ppu_init_chr_rom(const uint8_t *chr_rom, size_t chr_rom_size);
 
 /* allocate memory to and initialise ppu struct, and set function to
  * be used to plot pixels */
@@ -72,14 +67,20 @@ int ppu_init(ppu_s **ppu,
 /* deallocate memory allocated to ppu with ppu_init */
 void ppu_destroy(ppu_s *ppu);
 
-/* returns the result of reading to memory-mapped register */
-uint8_t ppu_register_fetch(ppu_s *ppu, uint16_t addr);
 
-/* deals with the internal effect fo writing to a ppu register */
+/*============================================================*/
+/* These functions are only used in memory.c so probably deserve
+ * their own header. */
+  
+uint8_t ppu_register_fetch(ppu_s *ppu, uint16_t addr);
 void ppu_register_write(ppu_s *ppu, uint16_t addr, uint8_t val, uint8_t *to_oamdma);
 
-/* return 1 if nmi */
-uint8_t ppu_check_nmi(ppu_s *ppu);
+/* Give the ppu functions to write and read to vram, which depend on mapper and
+ * nametable arrangement */
+void ppu_register_vram_write_callback(void (*vram_write)(uint16_t, uint8_t, void *),
+                                      void *data);
+void ppu_register_vram_fetch_callback(uint8_t (*vram_fetch)(uint16_t, void *),
+                                      void *data);
 
 /* does one ppu cycle */
 void ppu_step(ppu_s *ppu, uint8_t *to_nmi);

@@ -49,6 +49,10 @@ static int parse_ines_header(char ines_header[16], ines_header_s *header_data,
 static int init_mapper_0(ines_header_s *header_data, FILE *fp, char *e_context);
 static inline void do_three_ppu_steps(uint8_t *to_nmi);
 
+static uint8_t vram_fetch(uint16_t addr, void *);
+static void vram_write(uint16_t addr, uint8_t val, void *);
+static inline uint16_t nametable_horizontal(uint16_t addr);
+static inline uint16_t nametable_vertical(uint16_t addr);
 /* ======= Memory Layout =======
  * https://www.nesdev.org/wiki/CPU_memory_map
  *
@@ -77,10 +81,13 @@ static inline void do_three_ppu_steps(uint8_t *to_nmi);
  *(0x8000 - 0xFFFF): Usually cartridge ROM and mapper registers
  *
  */
-static uint8_t memory_cpu[0x10000] = {0};
 static ines_header_s header_data;
-
 static ppu_s *ppu;
+static uint8_t memory_cpu[0x10000] = {0};
+static uint8_t memory_ppu[0x4000] = {0};
+static uint16_t (*nametable_mirror)(uint16_t addr) = NULL;
+
+
 static void (*on_fetch)(uint16_t addr, uint8_t val, void *) = NULL;
 static void *on_fetch_data = NULL;
 static void (*on_write)(uint16_t addr, uint8_t val, void *) = NULL;
@@ -152,7 +159,7 @@ int memory_init(const char *filename, ppu_s *p, char *e_context) {
       goto error;
     }
   }
-
+  
   switch (header_data.mapper_n) {
   case 0:
     err = init_mapper_0(&header_data, fp, e_context);
@@ -171,12 +178,6 @@ error:
     strncpy(e_context, filename, LEN_E_CONTEXT - 1);
   }
   return err;
-}
-
-uint16_t memory_init_cpu_pc(void) {
-  uint8_t pc_low = memory_cpu[0xFFFC];
-  uint8_t pc_high = memory_cpu[0xFFFD];
-  return (pc_low | pc_high << 8);
 }
 
 #define FPRINTF_CHECK_ERROR(fprintf_statement)                                 \
@@ -470,17 +471,77 @@ static int init_mapper_0(ines_header_s *header_data, FILE *fp,
   }
 
   if (ppu != NULL) {
-
-    uint8_t chr_rom[0x2000] = {0};
-
-    if (fread(chr_rom, sizeof(uint8_t), 0x2000 * header_data->chr_rom_size,
-              fp) < 0x2000 * header_data->chr_rom_size) {
+    size_t chr_rom_bytes = 0x2000 * header_data->chr_rom_size;
+    if (fread(memory_ppu, 1, chr_rom_bytes, fp) < chr_rom_bytes) {
       return -E_READ_FILE;
     }
-
-    ppu_init_chr_rom(chr_rom, 0x2000 * header_data->chr_rom_size);
   }
+
+  for (int i = 0x3F00; i < 0x4000; i++) {
+    memory_ppu[i] = i - 0x3F00;
+  }
+  nametable_mirror = (header_data->nt_arrangement) ? &nametable_vertical
+                                                  : &nametable_horizontal;
+  ppu_register_vram_fetch_callback(&vram_fetch, NULL);
+  ppu_register_vram_write_callback(&vram_write, NULL);
+  
   return E_NO_ERROR;
+}
+
+static uint8_t vram_fetch(uint16_t addr, void *data) {
+  if (addr < 0x2000) {
+    return memory_ppu[addr];
+  }
+
+  else if (addr < 0x3F00) {
+    return memory_ppu[nametable_mirror(addr)];
+  }
+
+  else {
+    return memory_ppu[addr]; // palette
+  }
+}
+
+static void vram_write(uint16_t addr, uint8_t val, void *data) {
+  if (addr < 0x2000) {
+    memory_ppu[addr] = val;
+  }
+
+  else if (addr < 0x3F00) {
+    memory_ppu[nametable_mirror(addr)] = val;
+  }
+
+  else {
+    memory_ppu[addr] = val;
+  }
+}
+/* must be better way than this but just getting it work first */
+static inline uint16_t nametable_horizontal(uint16_t addr) {
+  if (addr < 0x2400) {
+    return addr;
+  }
+
+  else if (addr < 0x2800) {
+    return addr - 0x400;
+  }
+
+  else if (addr < 0x2C00) {
+    return addr;
+  }
+
+  else {
+    return addr - 0x400;
+  }
+}
+
+static inline uint16_t nametable_vertical(uint16_t addr) {
+  if (addr < 0x2800) {
+    return addr;
+  }
+
+  else {
+    return addr - 0x800;
+  }
 }
 
 static inline void do_three_ppu_steps(uint8_t *to_nmi) {

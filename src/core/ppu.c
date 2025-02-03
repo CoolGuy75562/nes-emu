@@ -55,40 +55,6 @@
 
 #define IGNORE_REG_WRITE_CYCLES 29657
 
-static void state_init(ppu_s *ppu);
-static void state_update(ppu_s *ppu);
-
-static void increment_ppu(ppu_s *ppu);
-
-static inline void  update_nmi(ppu_s *ppu);
-/* for rendering */
-static void background_step(ppu_s *ppu);
-static void sprite_step(ppu_s *ppu);
-static void tile_data_fetch(ppu_s *ppu, uint8_t offset);
-static void render_pixel(ppu_s *ppu);
-
-static void nt_byte_fetch(ppu_s *ppu);
-static void at_byte_fetch(ppu_s *ppu);
-static void ptt_low_byte_fetch(ppu_s *ppu);
-static void ptt_high_byte_fetch(ppu_s *ppu);
-
-static void inc_hori_v(ppu_s *ppu);
-static void inc_vert_v(ppu_s *ppu);
-
-
-static uint8_t ppustatus_fetch(ppu_s *ppu);
-static uint8_t oamdata_fetch(ppu_s *ppu);
-static uint8_t ppudata_fetch(ppu_s *ppu);
-
-static void ppuctrl_write(ppu_s *ppu, uint8_t val);
-static void ppumask_write(ppu_s *ppu, uint8_t val);
-static void oamaddr_write(ppu_s *ppu, uint8_t val);
-static void oamdata_write(ppu_s *ppu, uint8_t val);
-static void ppuscroll_write(ppu_s *ppu, uint8_t val);
-static void ppuaddr_write(ppu_s *ppu, uint8_t val);
-static void ppudata_write(ppu_s *ppu, uint8_t val);
-static void oamdma_write(ppu_s *ppu, uint8_t val);
-
 typedef struct ppu_s {
   /* memory-mapped registers */
   uint8_t ppuctrl;     /* 0x2000 */
@@ -142,9 +108,37 @@ typedef struct ppu_s {
   uint8_t nmi_occurred;
 } ppu_s;
 
+static void state_init(ppu_s *ppu);
+static void state_update(ppu_s *ppu);
+
+static void increment_ppu(ppu_s *ppu);
+static inline void  update_nmi(ppu_s *ppu);
+static void background_step(ppu_s *ppu);
+static void sprite_step(ppu_s *ppu);
+static void tile_data_fetch(ppu_s *ppu, uint8_t offset);
+static void render_pixel(ppu_s *ppu);
+static void nt_byte_fetch(ppu_s *ppu);
+static void at_byte_fetch(ppu_s *ppu);
+static void ptt_low_byte_fetch(ppu_s *ppu);
+static void ptt_high_byte_fetch(ppu_s *ppu);
+static void inc_hori_v(ppu_s *ppu);
+static void inc_vert_v(ppu_s *ppu);
+
+static inline uint8_t ppustatus_fetch(ppu_s *ppu);
+static inline uint8_t oamdata_fetch(ppu_s *ppu);
+static inline uint8_t ppudata_fetch(ppu_s *ppu);
+
+static inline void ppuctrl_write(ppu_s *ppu, uint8_t val);
+static inline void ppumask_write(ppu_s *ppu, uint8_t val);
+static inline void oamaddr_write(ppu_s *ppu, uint8_t val);
+static inline void oamdata_write(ppu_s *ppu, uint8_t val);
+static inline void ppuscroll_write(ppu_s *ppu, uint8_t val);
+static inline void ppuaddr_write(ppu_s *ppu, uint8_t val);
+static inline void ppudata_write(ppu_s *ppu, uint8_t val);
+static inline void oamdma_write(ppu_s *ppu, uint8_t val);
+
 /* global state */
 static ppu_state_s ppu_state;
-static uint8_t memory_ppu[0x4000] = {0};
 static uint8_t memory_oam[0x100] = {0};
 static uint8_t memory_secondary_oam[32] = {0};
 
@@ -152,10 +146,14 @@ static uint8_t memory_secondary_oam[32] = {0};
 static void (*log_error)(const char *, ...) = NULL;
 static void (*on_ppu_state_update)(const ppu_state_s *ppu_state, void *data) = NULL;
 static void (*put_pixel)(int i, int j, uint8_t palette_idx, void *data) = NULL;
+static uint8_t (*vram_fetch)(uint16_t addr, void *data);
+static void (*vram_write)(uint16_t addr, uint8_t val, void *data);
 
 /* callback data */
 static void *on_ppu_state_update_data = NULL;
 static void *put_pixel_data = NULL;
+static void *vram_fetch_data = NULL;
+static void *vram_write_data = NULL;
 
 /*----------------------------------------------------------------------------*/
 void ppu_register_state_callback(void (*ppu_state_cb)(const ppu_state_s *, void *),
@@ -172,10 +170,19 @@ void ppu_register_error_callback(void (*log_error_cb)(const char *, ...)) {
 
 void ppu_unregister_error_callback(void) { log_error = NULL; }
 
-void ppu_init_chr_rom(const uint8_t *chr_rom, size_t chr_rom_size) {
-  memcpy(memory_ppu, chr_rom, chr_rom_size);
+void ppu_register_vram_fetch_callback(uint8_t (*callback)(uint16_t, void *),
+                                      void *data) {
+  vram_fetch = callback;
+  vram_fetch_data = data;
 }
 
+void ppu_register_vram_write_callback(void (*callback)(uint16_t, uint8_t,
+                                                       void *),
+                                      void *data) {
+  vram_write = callback;
+  vram_write_data = data;
+}
+  
 int ppu_init(ppu_s **p, void (*put_pixel_cb)(int, int, uint8_t, void *),
              void *data) {
   put_pixel = put_pixel_cb;
@@ -188,10 +195,6 @@ int ppu_init(ppu_s **p, void (*put_pixel_cb)(int, int, uint8_t, void *),
   }
   ppu_s *ppu = *p;
   ppu->ppustatus = 0xA0;
-
-  for (int i = 0x3F00; i < 0x4000; i++) {
-    memory_ppu[i] = i - 0x3F00;
-  }
   state_init(ppu);
   //on_ppu_state_update(&ppu_state, on_ppu_state_update_data);
   return E_NO_ERROR;
@@ -200,6 +203,10 @@ int ppu_init(ppu_s **p, void (*put_pixel_cb)(int, int, uint8_t, void *),
 void ppu_destroy(ppu_s *ppu) { free(ppu); }
 
 void ppu_step(ppu_s *ppu, uint8_t *to_nmi) {
+
+  if (ppu->scanline < 240 && ppu->cycles < 256) {
+    render_pixel(ppu);
+  }
   /* ppuctrl write could have set nmi */
   *to_nmi |= ppu->nmi_occurred;
 
@@ -217,10 +224,6 @@ void ppu_step(ppu_s *ppu, uint8_t *to_nmi) {
     ppu->ppustatus &= ~MASK_PPUSTATUS_ALL;
     update_nmi(ppu);
     *to_nmi |= ppu->nmi_occurred;
-  }
-  
-  if (ppu->scanline < 240 && ppu->cycles < 256) {
-    render_pixel(ppu);
   }
   
   increment_ppu(ppu);
@@ -298,9 +301,6 @@ void ppu_register_write(ppu_s *ppu, uint16_t addr, uint8_t val, uint8_t *to_oamd
 }
 
 static void state_init(ppu_s *ppu) {
-  ppu_state.memory_ppu = &memory_ppu;
-  ppu_state.memory_oam = &memory_oam;
-  ppu_state.memory_secondary_oam = &memory_secondary_oam;
   state_update(ppu);
 }
 
@@ -331,7 +331,7 @@ static void nt_byte_fetch(ppu_s *ppu) {
 
   /* according to wiki: */
   uint16_t addr = 0x2000 | (ppu->v & 0xFFF);
-  ppu->nt_byte = memory_ppu[addr];
+  ppu->nt_byte = vram_fetch(addr, vram_fetch_data);
 }
 
 static void at_byte_fetch(ppu_s *ppu) { /*
@@ -343,21 +343,21 @@ addr += (ppu->v & MASK_T_V_COARSE_X >> 2) |
   /* according to wiki: */
   uint16_t addr = 0x23C0 | (ppu->v & MASK_T_V_NAMETABLE) |
                   ((ppu->v >> 4) & 0x38) | ((ppu->v >> 2) & 0x07);
-  ppu->at_byte = memory_ppu[addr];
+  ppu->at_byte = vram_fetch(addr, vram_fetch_data);
 }
 
 static void ptt_low_byte_fetch(ppu_s *ppu) {
   uint16_t addr = (ppu->v & MASK_T_V_FINE_Y) >> 12;
-  addr |= (ppu->nt_byte << 4);
-  addr |= (ppu->ppuctrl & MASK_PPUCTRL_NAMETABLE) ? 0x1000 : 0;
-  ppu->ptt_low = memory_ppu[addr];
+  addr += (ppu->nt_byte << 4);
+  addr += (ppu->ppuctrl & MASK_PPUCTRL_NAMETABLE) ? 0x1000 : 0;
+  ppu->ptt_low = vram_fetch(addr, vram_fetch_data);
 }
 
 static void ptt_high_byte_fetch(ppu_s *ppu) {
   uint16_t addr = ((ppu->v & MASK_T_V_FINE_Y) >> 12) + 8;
-  addr |= (ppu->nt_byte << 4);
-  addr |= (ppu->ppuctrl & MASK_PPUCTRL_NAMETABLE) ? 0x1000 : 0;
-  ppu->ptt_high = memory_ppu[addr];
+  addr += (ppu->nt_byte << 4);
+  addr += (ppu->ppuctrl & MASK_PPUCTRL_NAMETABLE) ? 0x1000 : 0;
+  ppu->ptt_high = vram_fetch(addr, vram_fetch_data);
 }
 
 /*-------------------------memory-mapped register reads
@@ -377,7 +377,7 @@ static uint8_t oamdata_fetch(ppu_s *ppu) { return  memory_oam[ppu->oamaddr]; }
 
 static uint8_t ppudata_fetch(ppu_s *ppu) {
   uint8_t val = ppu->ppudata_rb;
-  ppu->ppudata_rb = memory_ppu[ppu->v & MASK_T_V_ADDR_ALL];
+  ppu->ppudata_rb = vram_fetch(ppu->v & MASK_T_V_ADDR_ALL, vram_fetch_data);
   
   /* Increment VRAM address by 1 or 32, depending on PPUCTRL second bit */
   ppu->v += (ppu->ppuctrl & MASK_PPUCTRL_INCREMENT) ? 32 : 1;
@@ -449,7 +449,7 @@ static void ppudata_write(ppu_s *ppu, uint8_t val) {
   if (!(ppu->ppumask & MASK_PPUMASK_BG_R_ENABLE ||
         ppu->ppumask & MASK_PPUMASK_SPRITE_R_ENABLE)) {
     /* not rendering */
-    memory_ppu[ppu->v & MASK_T_V_ADDR_ALL] = val;
+    vram_write(ppu->v & MASK_T_V_ADDR_ALL, val, vram_write_data);
   }
   ppu->v += (ppu->ppuctrl & MASK_PPUCTRL_INCREMENT) ? 32 : 1;
   ppu->v &= MASK_T_V_SCROLL_ALL;
@@ -622,7 +622,7 @@ static void render_pixel(ppu_s *ppu) {
       (((ppu->ptt_shift_high >> i) & 1) << 1) | ((ppu->ptt_shift_low >> i) & 1);
 
   uint8_t color_idx = (at_color_idx << 2) | ptt_color_idx;
-  uint8_t palette_idx = memory_ppu[0x3F00 + color_idx];
+  uint8_t palette_idx = vram_fetch(0x3F00 + color_idx, vram_fetch_data);
   put_pixel(ppu->scanline, ppu->cycles, palette_idx, put_pixel_data);
 }
 

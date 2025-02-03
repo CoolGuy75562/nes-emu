@@ -313,6 +313,8 @@ MainWindow::MainWindow(QWidget *parent)
   connect(this, SIGNAL(step_button_clicked()), nes_context, SLOT(nes_step()));
 
   /* I think this should delete everything properly when exiting programme */
+
+  /*Nope it segfaults when closing window when nes context running */
   connect(nes_context, SIGNAL(nes_done()), timer, SLOT(stop()));
   connect(nes_context, SIGNAL(nes_done()), nes_thread, SLOT(quit()));
   connect(nes_context, SIGNAL(nes_done()), nes_context, SLOT(deleteLater()));
