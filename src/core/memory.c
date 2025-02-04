@@ -516,7 +516,7 @@ static int init_mapper_0(ines_header_s *header_data, FILE *fp,
     }
   }
 
-  for (int i = 0x3F00; i < 0x4000; i++) {
+  for (int i = 0x3F00; i < 0x3F20; i++) {
     memory_ppu[i] = i - 0x3F00;
   }
   nametable_mirror = (header_data->nt_arrangement) ? &nametable_vertical
@@ -537,7 +537,7 @@ static uint8_t vram_fetch(uint16_t addr, void *data) {
   }
 
   else {
-    return memory_ppu[addr]; // palette
+    return memory_ppu[0x3F00 + (addr % 0x20)]; // palette
   }
 }
 
@@ -551,9 +551,10 @@ static void vram_write(uint16_t addr, uint8_t val, void *data) {
   }
 
   else {
-    memory_ppu[addr] = val;
+    memory_ppu[0x3F00 + (addr % 0x20)] = val; // palette
   }
 }
+
 /* must be better way than this but just getting it work first */
 static inline uint16_t nametable_horizontal(uint16_t addr) {
   if (addr < 0x2400) {
