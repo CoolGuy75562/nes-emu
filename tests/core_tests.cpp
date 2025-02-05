@@ -31,8 +31,6 @@ static void cb_error_none(const char *format, ...) {}
 static void cb_ppu_none(const ppu_state_s *ppu_state, void *data) {}
 static void cb_cpu_none(const cpu_state_s *cpu_state, void *data) {}
 static void cb_memory_none(uint16_t addr, uint8_t val, void *data) {}
-static uint8_t vram_fetch(uint16_t addr, void *data) { return 0; }
-static void vram_write(uint16_t addr, uint8_t val, void *data) {}
 
 BOOST_AUTO_TEST_SUITE(core_tests)
 
@@ -41,8 +39,6 @@ BOOST_AUTO_TEST_CASE(ppu_test) {
   ppu_s *ppu = nullptr;
   /* No callbacks registered */
   BOOST_CHECK(ppu_init(&ppu, &put_pixel, NULL) == -E_NO_CALLBACK);
-  ppu_register_vram_fetch_callback(&vram_fetch, NULL);
-  ppu_register_vram_write_callback(&vram_write, NULL);
   
   /* only error callback registered */
   ppu_register_error_callback(&cb_error_none);

@@ -20,6 +20,7 @@
 
 #include "core/errors.h"
 #include "core/ppu.h"
+#include "ppup.h"
 
 #define MASK_PPUCTRL_NAMETABLE 0x3
 #define MASK_PPUCTRL_INCREMENT 0x4
@@ -143,12 +144,15 @@ static uint8_t memory_oam[0x100] = {0};
 static uint8_t memory_secondary_oam[32] = {0};
 
 /* callbacks */
+static uint8_t default_fetch(uint16_t a, void *d) { return 0;}
+static void default_write(uint16_t a, uint8_t v, void *d) {}
+
 static void (*log_error)(const char *, ...) = NULL;
 static void (*on_ppu_state_update)(const ppu_state_s *ppu_state,
                                    void *data) = NULL;
 static void (*put_pixel)(int i, int j, uint8_t palette_idx, void *data) = NULL;
-static uint8_t (*vram_fetch)(uint16_t addr, void *data);
-static void (*vram_write)(uint16_t addr, uint8_t val, void *data);
+static uint8_t (*vram_fetch)(uint16_t addr, void *data) = &default_fetch;
+static void (*vram_write)(uint16_t addr, uint8_t val, void *data) = &default_write;
 
 /* callback data */
 static void *on_ppu_state_update_data = NULL;

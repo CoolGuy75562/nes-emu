@@ -17,6 +17,8 @@
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include "memoryp.h"
+#include "ppup.h"
 #include "core/memory.h"
 #include "core/errors.h"
 
@@ -44,16 +46,20 @@ typedef struct ines_header_s {
   uint8_t tv_system;
 } ines_header_s;
 
+/*======================Functions================================*/
+
 static int parse_ines_header(char ines_header[16], ines_header_s *header_data,
                              char *e_context);
 static int init_mapper_0(ines_header_s *header_data, FILE *fp, char *e_context);
 static inline void do_three_ppu_steps(uint8_t *to_nmi);
-
 static uint8_t vram_fetch(uint16_t addr, void *);
 static void vram_write(uint16_t addr, uint8_t val, void *);
 static inline uint16_t nametable_horizontal(uint16_t addr);
 static inline uint16_t nametable_vertical(uint16_t addr);
-/* ======= Memory Layout =======
+
+/*======================Global State============================*/
+
+/* ======= CPU Memory Layout =======
  * https://www.nesdev.org/wiki/CPU_memory_map
  *
  * Memory: 0x0000 - 0xFFFF
@@ -79,19 +85,20 @@ static inline uint16_t nametable_vertical(uint16_t addr);
  * 0x4020 - 0xFFFF : Unmapped
  *(0x6000 - 0x7FFF): Usually cartridge RAM if present
  *(0x8000 - 0xFFFF): Usually cartridge ROM and mapper registers
- *
  */
-static ines_header_s header_data;
-static ppu_s *ppu;
 static uint8_t memory_cpu[0x10000] = {0};
 static uint8_t memory_ppu[0x4000] = {0};
+static ines_header_s header_data;
+static ppu_s *ppu;
+
+/* Callbacks and callback data */
+static void (*on_fetch)(uint16_t addr, uint8_t val, void *) = NULL;
+static void (*on_write)(uint16_t addr, uint8_t val, void *) = NULL;
+static void *on_fetch_data = NULL;
+static void *on_write_data = NULL;
 static uint16_t (*nametable_mirror)(uint16_t addr) = NULL;
 
-
-static void (*on_fetch)(uint16_t addr, uint8_t val, void *) = NULL;
-static void *on_fetch_data = NULL;
-static void (*on_write)(uint16_t addr, uint8_t val, void *) = NULL;
-static void *on_write_data = NULL;
+/*======================Global Functions==========================*/
 
 void memory_register_cb(void (*memory_cb)(uint16_t, uint8_t, void *),
                         void *data, memory_cb_e cb_type) {
@@ -312,6 +319,22 @@ void ines_header_dump(void) {
 }
 */
 
+void memory_init_harte_test_case(const uint16_t *addrs, const uint8_t *vals,
+                                 size_t length) {
+  memset(memory_cpu, 0, sizeof(memory_cpu));
+  for (size_t i = 0; i < length; i++) {
+    memory_cpu[addrs[i]] = vals[i];
+  }
+}
+
+void memory_reset_harte(const uint16_t *addrs, uint8_t *final_vals,
+                        size_t length) {
+  for (size_t i = 0; i < length; i++) {
+    final_vals[i] = memory_cpu[addrs[i]];
+  }
+}
+
+/*======================Private header functions============================*/
 void memory_do_oamdma(uint8_t val, uint16_t *cycles, uint8_t *to_nmi) {
   /* if odd cpu cycle need to wait another cycle for dma to read */
   if (*cycles & 1) {
@@ -436,21 +459,7 @@ void memory_write(uint16_t addr, uint8_t val, uint8_t *to_oamdma,
   on_write(effective_addr, val, on_write_data);
 }
 
-void memory_init_harte_test_case(const uint16_t *addrs, const uint8_t *vals,
-                                 size_t length) {
-  memset(memory_cpu, 0, sizeof(memory_cpu));
-  for (size_t i = 0; i < length; i++) {
-    memory_cpu[addrs[i]] = vals[i];
-  }
-}
-
-void memory_reset_harte(const uint16_t *addrs, uint8_t *final_vals,
-                        size_t length) {
-  for (size_t i = 0; i < length; i++) {
-    final_vals[i] = memory_cpu[addrs[i]];
-  }
-}
-
+/*==========================Static functions=================================*/
 static int parse_ines_header(char ines_header[16], ines_header_s *header_data,
                              char *e_context) {
 

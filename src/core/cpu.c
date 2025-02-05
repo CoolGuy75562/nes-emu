@@ -20,7 +20,7 @@
 
 #include "core/cpu.h"
 #include "core/errors.h"
-#include "core/memory.h"
+#include "memoryp.h"
 
 /* Sets current instruction and address mode strings in cpu_state struct
  * by "stringifying" them e.g. opstr = ADC, mode = ABS_X -> "ADC", "ABS_X",

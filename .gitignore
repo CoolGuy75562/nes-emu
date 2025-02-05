@@ -17,6 +17,7 @@
 !/src/core
 !/src/core/*.c
 !/src/core/*.cpp
+!/src/core/*.h
 !/src/core/CMakeLists.txt
 
 !/src/app
