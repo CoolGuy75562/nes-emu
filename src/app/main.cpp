@@ -15,16 +15,8 @@
  */
 
 #include <QApplication>
-#include <QMainWindow>
-#include <QMessageBox>
-#include <QString>
-#include <QTimer>
-#include <QtDebug>
 
-#include <cstdio>
-#include <iostream>
 #include <memory>
-#include <string>
 
 #include "core/cppwrapper.hpp"
 #include "mainwindow.h"

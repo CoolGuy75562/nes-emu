@@ -7,6 +7,18 @@
 
 #include "core/cppwrapper.hpp"
 
+template <typename T> struct ringbuffer {
+  ringbuffer<T>() : start_idx(0) {}
+  std::array<T, 0x100> buf;
+  size_t start_idx;
+
+  void push(T val) {
+    ++start_idx &= 0xFF;
+    buf[start_idx] = val;
+  }
+};
+
+
 /* Base class for cpu, ppu, memory models which go in the cpu, ppu, memory table
  * views in the main window.
  *
@@ -29,9 +41,8 @@ public:
                       int role = Qt::DisplayRole) const override;
 protected:
   virtual QVariant indexToQString(const QModelIndex &index) const = 0;
-  void addState(T&);
-  void nes_started();
-  void nes_stopped();
+  void addState(T &);
+  void addState(ringbuffer<T> &);
 
   const int rows, cols;
 
@@ -41,8 +52,6 @@ protected:
   
 private:
   const QStringList header_labels;
-  bool nes_running;
-  long last_model_update;
 };
 
 /*============================================================*/
@@ -51,10 +60,7 @@ template <typename T>
 NESTableModel<T>::NESTableModel(int rows, int cols, QStringList header_labels,
                              QWidget *parent)
     : QAbstractTableModel(parent), rows(rows), cols(cols),
-      header_labels(header_labels) {
-  nes_running = false;
-  last_model_update = 0;
-}
+      header_labels(header_labels) {}
 
 template <typename T>
 int NESTableModel<T>::rowCount(const QModelIndex &parent) const {
@@ -104,31 +110,21 @@ QVariant NESTableModel<T>::headerData(int section, Qt::Orientation orientation,
   return header_labels.at(section);
 }
 
-template <typename T>
-void NESTableModel<T>::addState(T &thing) {
+template <typename T> void NESTableModel<T>::addState(T &thing) {
+  beginResetModel();
   table_data[++table_data_start_idx & (rows - 1)] = thing;
-  if (nes_running) {
-    if (last_model_update <= 0) {
-      last_model_update = rows * 100;
-      emit dataChanged(index(0, 0), index(rows - 1, cols - 1));
-    } else {
-      last_model_update--;
-    }
-  } else {
-    emit dataChanged(index(0, 0), index(rows - 1, cols - 1));
+  endResetModel();
+  //  emit dataChanged(index(0, 0), index(rows - 1, cols - 1));
+}
+
+template <typename T> void NESTableModel<T>::addState(ringbuffer<T> &rbuf) {
+  beginResetModel();
+  for (int i = 0; i < 0x100; i++) {
+    table_data[++table_data_start_idx & (rows - 1)] =
+        rbuf.buf[(rbuf.start_idx + i + 1) & 0xFF];
   }
-}
-
-template <typename T>
-void NESTableModel<T>::nes_started() {
-  nes_running = true;
-  last_model_update = 0;
-}
-
-template <typename T>
-void NESTableModel<T>::nes_stopped() {
-  nes_running = false;
-  emit dataChanged(index(0, 0), index(rows - 1, cols - 1));
+  endResetModel();
+  //  emit dataChanged(index(0, 0), index(rows - 1, cols - 1));
 }
 
 #endif

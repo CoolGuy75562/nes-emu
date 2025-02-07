@@ -16,6 +16,7 @@ add_executable(nes-emu
     mainwindow.cpp
     nescontext.cpp
     nesscreen.cpp
+    nescontroller.cpp
     openglwidget.cpp
 )
 

@@ -19,6 +19,7 @@
 
 #include "memoryp.h"
 #include "ppup.h"
+#include "controllerp.h"
 #include "core/memory.h"
 #include "core/errors.h"
 
@@ -373,7 +374,11 @@ uint8_t memory_fetch(uint16_t addr, uint8_t *to_nmi) {
       val = ppu_register_fetch(ppu, effective_addr);
     }
 
-    /* api, i/o registers */
+    else if (addr == 0x4016) {
+      effective_addr = addr;
+      val = controller_fetch();
+    }
+    /* apu, i/o registers */
     else if (addr < 0x4020) {
       effective_addr = addr;
       val = memory_cpu[effective_addr];
@@ -429,6 +434,11 @@ void memory_write(uint16_t addr, uint8_t val, uint8_t *to_oamdma,
       ppu_register_write(ppu, effective_addr, val, to_oamdma);
     }
 
+    else if (addr == 0x4016) {
+      effective_addr = addr;
+      controller_write(val);
+    }
+    
     else if (addr < 0x4020) {
       effective_addr = addr;
       memory_cpu[effective_addr] = val;

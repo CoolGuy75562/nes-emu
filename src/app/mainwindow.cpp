@@ -1,5 +1,4 @@
 #include "mainwindow.h"
-#include "nesscreen.h"
 #include "ui_mainwindow.h"
 
 #include <QBoxLayout>
@@ -9,6 +8,7 @@
 #include <QThread>
 #include <QTimer>
 #include <QtDebug>
+#include <cstring>
 #include <iostream>
 
 /* Callbacks */
@@ -23,6 +23,9 @@ Q_DECLARE_METATYPE(NESError)
 Q_DECLARE_METATYPE(cpu_state_s)
 Q_DECLARE_METATYPE(ppu_state_s)
 Q_DECLARE_METATYPE(cycle)
+Q_DECLARE_METATYPE(ringbuffer<cpu_state_s>)
+Q_DECLARE_METATYPE(ringbuffer<ppu_state_s>)
+Q_DECLARE_METATYPE(ringbuffer<cycle>)
 
 /*============================================================*/
 
@@ -54,6 +57,9 @@ void show_error(QWidget *parent, NESError &e) {
 
 /*============================================================*/
 
+// This and the NESTableModels can definitely be optimised.
+// Too much copying and CPU usage. Qt signals probably not the
+// right tool for the job.
 void on_cpu_state_update(const cpu_state_s *state, void *cb_forwarder) {
   static NESCallbackForwarder *cbf =
       static_cast<NESCallbackForwarder *>(cb_forwarder);
@@ -69,13 +75,65 @@ void on_ppu_state_update(const ppu_state_s *state, void *cb_forwarder) {
 void on_memory_fetch(uint16_t addr, uint8_t val, void *cb_forwarder) {
   static NESCallbackForwarder *cbf =
       static_cast<NESCallbackForwarder *>(cb_forwarder);
-  emit cbf->memory_update(cycle(addr, val, 'r'));
+  emit cbf->memory_state_update(cycle(addr, val, 'r'));
 }
 
 void on_memory_write(uint16_t addr, uint8_t val, void *cb_forwarder) {
   static NESCallbackForwarder *cbf =
       static_cast<NESCallbackForwarder *>(cb_forwarder);
-  emit cbf->memory_update(cycle(addr, val, 'w'));
+  emit cbf->memory_state_update(cycle(addr, val, 'w'));
+}
+
+/*============================================================*/
+
+NESCallbackBuffer::NESCallbackBuffer(QObject *parent)
+    : QObject(parent) {
+
+  for (int i = 0; i < 0x100; i++) {
+    cpu_state_s cs;
+    std::memset(&cs, 0, sizeof(cs));
+
+    ppu_state_s ps;
+    std::memset(&ps, 0, sizeof(ps));
+
+    cpu_state_buffer.buf.at(i) = cs;
+    ppu_state_buffer.buf.at(i) = ps;
+    memory_state_buffer.buf.at(i) = cycle();
+  }
+
+  batch_timer = new QTimer(this);
+  batch_timer->setInterval(64);
+  connect(batch_timer, &QTimer::timeout, this, [this]() {
+    emit this->batch_cpu_states(cpu_state_buffer);
+    emit this->batch_ppu_states(ppu_state_buffer);
+    emit this->batch_memory_states(memory_state_buffer);
+  });
+}
+
+void NESCallbackBuffer::start(void) { batch_timer->start(); }
+
+void NESCallbackBuffer::stop(void) {
+  // Not sure if there is a possibility of more signals
+  // queued that get thrown away after the flush
+ 
+  // Flush
+  emit batch_cpu_states(cpu_state_buffer);
+  emit batch_ppu_states(ppu_state_buffer);
+  emit batch_memory_states(memory_state_buffer);
+  batch_timer->stop();
+  emit cb_buffer_stopped();
+}
+
+void NESCallbackBuffer::cpu_state_update(cpu_state_s state) {
+  cpu_state_buffer.push(state);
+}
+
+void NESCallbackBuffer::ppu_state_update(ppu_state_s state) {
+  ppu_state_buffer.push(state);
+}
+
+void NESCallbackBuffer::memory_update(cycle state) {
+  memory_state_buffer.push(state);
 }
 
 /*============================================================*/
@@ -83,23 +141,20 @@ void on_memory_write(uint16_t addr, uint8_t val, void *cb_forwarder) {
 CPUTableModel::CPUTableModel(QWidget *parent)
     : NESTableModel(rows, cols, header_labels, parent) {
   table_data.reserve(rows);
-  cpu_state_s s = {
-    .pc = 0,
-    .cycles = 0,
-    .a = 0,
-    .x = 0,
-    .y = 0,
-    .sp = 0,
-    .p = 0,
-    .opc = 0,
-    .curr_instruction = "N/A",
-    .curr_addr_mode = "N/A"
-  };
+  cpu_state_s s = {.pc = 0,
+                   .cycles = 0,
+                   .a = 0,
+                   .x = 0,
+                   .y = 0,
+                   .sp = 0,
+                   .p = 0,
+                   .opc = 0,
+                   .curr_instruction = "N/A",
+                   .curr_addr_mode = "N/A"};
   for (int i = 0; i < rows; i++) {
     table_data.push_back(s);
   }
 }
-
 
 PPUTableModel::PPUTableModel(QWidget *parent)
     : NESTableModel(rows, cols, header_labels, parent) {
@@ -122,7 +177,6 @@ PPUTableModel::PPUTableModel(QWidget *parent)
   }
 }
 
-
 MemoryTableModel::MemoryTableModel(QWidget *parent)
     : NESTableModel(rows, cols, header_labels, parent) {
   table_data.reserve(rows);
@@ -130,7 +184,6 @@ MemoryTableModel::MemoryTableModel(QWidget *parent)
     table_data.push_back(cycle());
   }
 }
-
 
 /*============================================================*/
 
@@ -200,39 +253,50 @@ QVariant PPUTableModel::indexToQString(const QModelIndex &index) const {
 
 QVariant MemoryTableModel::indexToQString(const QModelIndex &index) const {
   const cycle *the_cycle =
-    &table_data.at((table_data_start_idx + rows - index.row()) & (rows - 1));
+      &table_data.at((table_data_start_idx + rows - index.row()) & (rows - 1));
   switch (index.column()) {
   case 0:
     return (the_cycle->r_or_w == 'r') ? "Read" : "Write";
   case 1:
-    return QStringLiteral("$%1").arg(the_cycle->addr, 4, 16,
-                                     QLatin1Char('0'));
+    return QStringLiteral("$%1").arg(the_cycle->addr, 4, 16, QLatin1Char('0'));
   case 2:
-    return QStringLiteral("$%1").arg(the_cycle->val, 2, 16,
-                                     QLatin1Char('0'));
+    return QStringLiteral("$%1").arg(the_cycle->val, 2, 16, QLatin1Char('0'));
   default:
     return QVariant();
   }
 }
 
 /* Hack because slots don't work with template classes */
-void MemoryTableModel::nes_started() { NESTableModel<cycle>::nes_started(); }
-void MemoryTableModel::nes_stopped() { NESTableModel<cycle>::nes_stopped(); }
 void MemoryTableModel::addState(cycle c) { NESTableModel<cycle>::addState(c); }
+void CPUTableModel::addState(cpu_state_s s) {
+  NESTableModel<cpu_state_s>::addState(s);
+}
+void PPUTableModel::addState(ppu_state_s s) {
+  NESTableModel<ppu_state_s>::addState(s);
+}
 
-void CPUTableModel::nes_started() { NESTableModel<cpu_state_s>::nes_started(); }
-void CPUTableModel::nes_stopped() { NESTableModel<cpu_state_s>::nes_stopped(); }
-void CPUTableModel::addState(cpu_state_s s) {NESTableModel<cpu_state_s>::addState(s); }
-
-void PPUTableModel::nes_started() { NESTableModel<ppu_state_s>::nes_started(); }
-void PPUTableModel::nes_stopped() { NESTableModel<ppu_state_s>::nes_stopped(); }
-void PPUTableModel::addState(ppu_state_s s) {NESTableModel<ppu_state_s>::addState(s); }
-
+void MemoryTableModel::addState(ringbuffer<cycle> r) {
+  NESTableModel<cycle>::addState(r);
+}
+void CPUTableModel::addState(ringbuffer<cpu_state_s> r) {
+  NESTableModel<cpu_state_s>::addState(r);
+}
+void PPUTableModel::addState(ringbuffer<ppu_state_s> r) {
+  NESTableModel<ppu_state_s>::addState(r);
+}
 /*============================================================*/
 
 MainWindow::MainWindow(QWidget *parent)
-    : QMainWindow(parent), ui(new Ui::MainWindow) {
+  : QMainWindow(parent), ui(new Ui::MainWindow), paused(true) {
 
+  qRegisterMetaType<ringbuffer<cycle>>();
+  qRegisterMetaType<cycle>();
+  qRegisterMetaType<ringbuffer<cpu_state_s>>();
+  qRegisterMetaType<cpu_state_s>();
+  qRegisterMetaType<ringbuffer<ppu_state_s>>();
+  qRegisterMetaType<ppu_state_s>();
+  qRegisterMetaType<NESError>();
+  
   /*----------------------Set up gui thread------------------------------*/
   cpu_model = new CPUTableModel(this);
   ppu_model = new PPUTableModel(this);
@@ -241,14 +305,11 @@ MainWindow::MainWindow(QWidget *parent)
   qDebug() << "MainWindow: Setting up ui";
   ui->setupUi(this);
 
-  auto init_view = [this](QTableView *view, QAbstractTableModel *model,
-                          enum QHeaderView::ResizeMode resize_mode) {
+  auto init_view = [](QTableView *view, QAbstractTableModel *model,
+                      enum QHeaderView::ResizeMode resize_mode) {
     view->setModel(model);
     view->verticalHeader()->hide();
-    // view->horizontalHeader()->setSectionResizeMode(resize_mode);
-    connect(this, SIGNAL(play_button_clicked()), model, SLOT(nes_started()));
-    connect(this, SIGNAL(pause_button_clicked()), model, SLOT(nes_stopped()));
-    connect(this, SIGNAL(step_button_clicked()), model, SLOT(nes_stopped()));
+    view->horizontalHeader()->setSectionResizeMode(resize_mode);
   };
 
   init_view(ui->cpuStateTableView, cpu_model, QHeaderView::ResizeToContents);
@@ -258,73 +319,51 @@ MainWindow::MainWindow(QWidget *parent)
   NESScreen *s = new NESScreen(this);
   ui->openGLWidget->initScreen(s);
 
-  /*----------------------Set up emulator thread-------------------------*/
+  /*----------------------Set up emulator and other threads-----------------*/
+
+  nes_thread = new QThread();
+  cb_buffer_thread = new QThread();
+  
+  // Get .nes file to open
   const std::string rom_filename =
       QFileDialog::getOpenFileName(this, "Open File", "/home",
                                    "NES ROM (*.nes)")
           .toStdString();
 
-  callback_forwarder = new NESCallbackForwarder();
-  cpu_register_state_callback(&on_cpu_state_update, callback_forwarder);
-  ppu_register_state_callback(&on_ppu_state_update, callback_forwarder);
-  memory_register_cb(&on_memory_fetch, callback_forwarder, MEMORY_CB_FETCH);
-  memory_register_cb(&on_memory_write, callback_forwarder, MEMORY_CB_WRITE);
+  init_callback_buffer();
+  init_callback_forwarder();
+  init_nes_controller();
+  init_nes_context(rom_filename, s);
 
-  qRegisterMetaType<cycle>();
-  qRegisterMetaType<cpu_state_s>();
-  qRegisterMetaType<ppu_state_s>();
-  qRegisterMetaType<NESError>();
-  
-  
-  
-  try {
-    qDebug() << "Initialising NESContext";
-    nes_context = new NESContext(rom_filename, s->get_put_pixel(), s);
-  } catch (NESError &e) {
-    error(e);
-    throw e;
-  }
-  nes_thread = new QThread();
-  nes_context->moveToThread(nes_thread);
-  callback_forwarder->moveToThread(nes_thread);
 
-  /* TODO: Move model addState logic to other thread because
-   * gui thread getting bogged down by all the updates
-   */
-  connect(callback_forwarder, SIGNAL(cpu_state_update(cpu_state_s)),
-          cpu_model, SLOT(addState(cpu_state_s)), Qt::QueuedConnection);
-  connect(callback_forwarder, SIGNAL(ppu_state_update(ppu_state_s)),
-          ppu_model, SLOT(addState(ppu_state_s)), Qt::QueuedConnection);
-  connect(callback_forwarder, SIGNAL(memory_update(cycle)), memory_model,
-          SLOT(addState(cycle)), Qt::QueuedConnection);
-  
-  connect(nes_context, SIGNAL(nes_error(NESError)), this,
-          SLOT(error(NESError)));
+  // have to wait for emulator to pause and send everything to buffer
+  // before buffer is flushed
+  connect(nes_context, SIGNAL(nes_paused()), callback_buffer, SLOT(stop()));
 
-  // TODO: sync emulator to frames
-  QTimer *timer = new QTimer();
-  timer->setInterval(0);
-  timer->moveToThread(nes_thread);
+  // have to wait for buffer to be done sending signals before disconnecting
+  // those signals from buffer
+  connect(callback_buffer, SIGNAL(cb_buffer_stopped()), this,
+          SLOT(cb_single_step_mode()));
 
-  connect(timer, SIGNAL(timeout()), nes_context, SLOT(nes_step()));
-  connect(this, SIGNAL(pause_button_clicked()), timer, SLOT(stop()));
-  connect(this, SIGNAL(play_button_clicked()), timer, SLOT(start()));
-  connect(this, SIGNAL(step_button_clicked()), timer, SLOT(stop()));
-  connect(this, SIGNAL(step_button_clicked()), nes_context, SLOT(nes_step()));
-
+  // above isn't so important for play button case because everything updates
+  // so quickly
+  connect(this, SIGNAL(play_button_clicked()), this, SLOT(cb_buffer_mode()));
+  connect(this, SIGNAL(play_button_clicked()), callback_buffer, SLOT(start()));
+ 
   /* I think this should delete everything properly when exiting programme */
 
   /*Nope it segfaults when closing window when nes context running */
-  connect(nes_context, SIGNAL(nes_done()), timer, SLOT(stop()));
   connect(nes_context, SIGNAL(nes_done()), nes_thread, SLOT(quit()));
   connect(nes_context, SIGNAL(nes_done()), nes_context, SLOT(deleteLater()));
   connect(nes_context, SIGNAL(nes_done()), callback_forwarder,
           SLOT(deleteLater()));
+  connect(nes_context, SIGNAL(nes_done()), nes_controller, SLOT(deleteLater()));
 
   connect(nes_thread, SIGNAL(finished()), nes_thread, SLOT(deleteLater()));
   connect(nes_thread, SIGNAL(finished()), this, SLOT(done()));
   qDebug() << "Starting nes thread";
   nes_thread->start();
+  cb_buffer_thread->start();
 }
 
 MainWindow::~MainWindow() { delete ui; }
@@ -334,7 +373,6 @@ MainWindow::~MainWindow() { delete ui; }
 void MainWindow::done(void) { QApplication::quitOnLastWindowClosed(); }
 
 void MainWindow::error(NESError e) {
-  emit pause_button_clicked();
   /*
   refresh_cpu_state();
   refresh_ppu_state();
@@ -343,15 +381,86 @@ void MainWindow::error(NESError e) {
   // QApplication::quit();
 }
 
-void MainWindow::on_pauseButton_clicked() { emit pause_button_clicked(); }
+void MainWindow::mousePressEvent(QMouseEvent *event) {
+  Q_UNUSED(event);
 
-void MainWindow::on_playButton_clicked() { emit play_button_clicked(); }
+  qDebug() << "MainWindow::mousePressEvent()";
+  setFocus();
+}
 
-void MainWindow::on_stepButton_clicked() { emit step_button_clicked(); }
+void MainWindow::keyPressEvent(QKeyEvent *event) {
+  // qDebug() << "Pressed key " << event->key();
+  if (!event->isAutoRepeat()) {
+    emit nes_button_pressed(event->key());
+  }
+}
+
+void MainWindow::keyReleaseEvent(QKeyEvent *event) {
+  // qDebug() << "Released key " << event->key();
+  if (!event->isAutoRepeat()) {
+    emit nes_button_released(event->key());
+  }
+}
+
+/* Switch single step updates with buffer updates */
+void MainWindow::cb_buffer_mode() {
+  disconnect(callback_forwarder, SIGNAL(cpu_state_update(cpu_state_s)),
+             cpu_model, SLOT(addState(cpu_state_s)));
+  disconnect(callback_forwarder, SIGNAL(ppu_state_update(ppu_state_s)),
+             ppu_model, SLOT(addState(ppu_state_s)));
+  disconnect(callback_forwarder, SIGNAL(memory_state_update(cycle)),
+             memory_model, SLOT(addState(cycle)));
+
+  connect(callback_forwarder, SIGNAL(cpu_state_update(cpu_state_s)),
+          callback_buffer, SLOT(cpu_state_update(cpu_state_s)));
+  connect(callback_forwarder, SIGNAL(ppu_state_update(ppu_state_s)),
+          callback_buffer, SLOT(ppu_state_update(ppu_state_s)));
+  connect(callback_forwarder, SIGNAL(memory_state_update(cycle)),
+          callback_buffer, SLOT(memory_update(cycle)));
+}
+
+/* above but reversed */
+void MainWindow::cb_single_step_mode() {
+  
+  disconnect(callback_forwarder, SIGNAL(cpu_state_update(cpu_state_s)),
+             callback_buffer, SLOT(cpu_state_update(cpu_state_s)));
+  disconnect(callback_forwarder, SIGNAL(ppu_state_update(ppu_state_s)),
+             callback_buffer, SLOT(ppu_state_update(ppu_state_s)));
+  disconnect(callback_forwarder, SIGNAL(memory_state_update(cycle)),
+             callback_buffer, SLOT(memory_update(cycle)));
+
+  connect(callback_forwarder, SIGNAL(cpu_state_update(cpu_state_s)), cpu_model,
+          SLOT(addState(cpu_state_s)), Qt::QueuedConnection);
+  connect(callback_forwarder, SIGNAL(ppu_state_update(ppu_state_s)), ppu_model,
+          SLOT(addState(ppu_state_s)), Qt::QueuedConnection);
+  connect(callback_forwarder, SIGNAL(memory_state_update(cycle)), memory_model,
+          SLOT(addState(cycle)), Qt::QueuedConnection);
+}
+
+void MainWindow::on_pauseButton_clicked() {
+  if (!paused) {
+    paused = true;
+    emit pause_button_clicked();
+  }
+}
+
+void MainWindow::on_playButton_clicked() {
+  if (paused) {
+    paused = false;
+    emit play_button_clicked();
+  }
+}
+
+void MainWindow::on_stepButton_clicked() {
+  on_pauseButton_clicked();
+  emit step_button_clicked();
+}
 
 /* Double check this is ok with threads */
 void MainWindow::on_memoryDumpButton_clicked() {
-  emit pause_button_clicked();
+  on_pauseButton_clicked();
+
+  // why not just dump it to a file and read it?
   char dump_data[1 << 19];
   size_t dump_len = 1 << 19;
   if (memory_dump_string(dump_data, dump_len) < 0) {
@@ -363,19 +472,21 @@ void MainWindow::on_memoryDumpButton_clicked() {
 }
 
 void MainWindow::on_VRAMDumpButton_clicked() {
-  emit pause_button_clicked();
+  on_pauseButton_clicked();
+  
   char dump_data[1 << 18];
   size_t dump_len = 1 << 18;
   if (memory_vram_dump_string(dump_data, dump_len) < 0) {
     qDebug() << "VRAM dump didn't work";
     return;
   }
-  
+
   show_hexdump_dialog(dump_data);
 }
 
 void MainWindow::on_patternTableButton_clicked() {
-  emit pause_button_clicked();
+  on_pauseButton_clicked();
+  
   QDialog pattern_table_dialog(this);
 
   PatternTableViewer *left_pt_viewer =
@@ -386,7 +497,7 @@ void MainWindow::on_patternTableButton_clicked() {
       new PatternTableViewer(1, &pattern_table_dialog);
   right_pt_viewer->setMinimumSize(256, 256);
   right_pt_viewer->draw_pattern_table();
-  
+
   QBoxLayout pattern_table_dialog_layout(QBoxLayout::LeftToRight);
   pattern_table_dialog_layout.addWidget(left_pt_viewer);
   pattern_table_dialog_layout.addWidget(right_pt_viewer);
@@ -410,4 +521,69 @@ void MainWindow::show_hexdump_dialog(const char *dump_data) {
 
   hexdump_dialog.exec();
 }
+
+void MainWindow::init_callback_buffer() {
+  callback_buffer = new NESCallbackBuffer();
+  callback_buffer->moveToThread(cb_buffer_thread);
   
+connect(callback_buffer, SIGNAL(batch_cpu_states(ringbuffer<cpu_state_s>)),
+        cpu_model, SLOT(addState(ringbuffer<cpu_state_s>)),
+        Qt::QueuedConnection);
+connect(callback_buffer, SIGNAL(batch_ppu_states(ringbuffer<ppu_state_s>)),
+        ppu_model, SLOT(addState(ringbuffer<ppu_state_s>)),
+        Qt::QueuedConnection);
+connect(callback_buffer, SIGNAL(batch_memory_states(ringbuffer<cycle>)),
+        memory_model, SLOT(addState(ringbuffer<cycle>)),
+        Qt::QueuedConnection);
+
+}
+
+void MainWindow::init_callback_forwarder() {
+  callback_forwarder = new NESCallbackForwarder();
+  callback_forwarder->moveToThread(nes_thread);
+  
+  // start in single step mode as opposed to buffer mode 
+  cpu_register_state_callback(&on_cpu_state_update, callback_forwarder);
+  ppu_register_state_callback(&on_ppu_state_update, callback_forwarder);
+  memory_register_cb(&on_memory_fetch, callback_forwarder, MEMORY_CB_FETCH);
+  memory_register_cb(&on_memory_write, callback_forwarder, MEMORY_CB_WRITE);
+
+  connect(callback_forwarder, SIGNAL(cpu_state_update(cpu_state_s)), cpu_model,
+          SLOT(addState(cpu_state_s)), Qt::QueuedConnection);
+  connect(callback_forwarder, SIGNAL(ppu_state_update(ppu_state_s)), ppu_model,
+          SLOT(addState(ppu_state_s)), Qt::QueuedConnection);
+  connect(callback_forwarder, SIGNAL(memory_update(cycle)), memory_model,
+          SLOT(addState(cycle)), Qt::QueuedConnection);
+}
+
+void MainWindow::init_nes_controller() {
+  nes_controller = new NESController();
+  nes_controller->moveToThread(nes_thread);
+  // controller signals 
+  connect(this, SIGNAL(nes_button_pressed(int)), nes_controller,
+          SLOT(nes_button_pressed(int)), Qt::QueuedConnection);
+  connect(this, SIGNAL(nes_button_released(int)), nes_controller,
+          SLOT(nes_button_released(int)), Qt::QueuedConnection);
+}
+
+void MainWindow::init_nes_context(const std::string &rom_filename, NESScreen *s) {
+  try {
+    qDebug() << "Initialising NESContext";
+    nes_context = new NESContext(rom_filename, s->get_put_pixel(), s,
+                                 &get_pressed_buttons, nes_controller);
+  } catch (NESError &e) {
+    error(e);
+    throw e;
+  }
+
+  nes_context->moveToThread(nes_thread);
+
+  connect(this, SIGNAL(pause_button_clicked()), nes_context, SLOT(nes_pause()),
+          Qt::BlockingQueuedConnection);
+  connect(this, SIGNAL(play_button_clicked()), nes_context, SLOT(nes_start()),
+          Qt::BlockingQueuedConnection);
+  
+  connect(this, SIGNAL(step_button_clicked()), nes_context, SLOT(nes_step()));
+  connect(nes_context, SIGNAL(nes_error(NESError)), this,
+          SLOT(error(NESError)));
+}

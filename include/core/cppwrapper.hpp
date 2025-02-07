@@ -25,6 +25,7 @@ extern "C" {
 #include "memory.h"
 #include "ppu.h"
 #include "cpu.h"
+#include "controller.h"
 }
 
 extern std::string error_names[];
