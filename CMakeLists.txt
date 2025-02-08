@@ -11,6 +11,7 @@ else()
 endif()
 
 add_compile_options("-g")
+add_compile_options("-Og")
 add_compile_options("-Wall")
 #add_compile_options("-fsanitize=address")
 

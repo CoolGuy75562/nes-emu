@@ -34,7 +34,10 @@ OpenGLWidget::~OpenGLWidget() {
 
 void OpenGLWidget::initScreen(NESScreen *s) {
   pbuf_ptr = s->getPBufPtr();
-  connect(s, SIGNAL(pbuf_full()), this, SLOT(update()));
+  QTimer *timer = new QTimer(this);
+  connect(timer, SIGNAL(timeout()), this, SLOT(update()));
+  timer->start(16);
+  // connect(s, SIGNAL(pbuf_full()), this, SLOT(update()));
 }
 
 void OpenGLWidget::resizeGL(int w, int h) {}

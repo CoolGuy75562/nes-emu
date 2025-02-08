@@ -1,3 +1,5 @@
+#include <QDebug>
+
 #include "nescontroller.h"
 extern "C" {
 #include "core/controller.h"
@@ -6,6 +8,7 @@ extern "C" {
 uint8_t get_pressed_buttons(void *controller) {
   static NESController *nes_controller =
       static_cast<NESController *>(controller);
+  qDebug() << QStringLiteral("%1").arg(nes_controller->buttons_pressed, 8, 2, QLatin1Char('0'));
   return nes_controller->buttons_pressed;
 }
 

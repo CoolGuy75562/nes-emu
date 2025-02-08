@@ -10,7 +10,7 @@ class NESController : public QObject {
   Q_OBJECT
 
 public:
-  explicit NESController(QObject *parent = nullptr) : QObject(parent) {}
+  explicit NESController(QObject *parent = nullptr) : QObject(parent), buttons_pressed(0) {}
   ~NESController() {}
   friend uint8_t get_pressed_buttons(void *controller);
   

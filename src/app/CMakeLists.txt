@@ -6,6 +6,7 @@ if(CMAKE_VERSION VERSION_LESS "3.7.0")
     set(CMAKE_INCLUDE_CURRENT_DIR ON)
 endif()
 
+set(OpenGL_GL_PREFERENCE GLVND)
 find_package(OpenGL REQUIRED)
 find_package(GLUT REQUIRED)
 find_package(Qt5 REQUIRED COMPONENTS Widgets OpenGL)

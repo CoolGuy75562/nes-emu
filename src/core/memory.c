@@ -53,8 +53,8 @@ static int parse_ines_header(char ines_header[16], ines_header_s *header_data,
                              char *e_context);
 static int init_mapper_0(ines_header_s *header_data, FILE *fp, char *e_context);
 static inline void do_three_ppu_steps(uint8_t *to_nmi);
-static uint8_t vram_fetch(uint16_t addr, void *);
-static void vram_write(uint16_t addr, uint8_t val, void *);
+static inline uint8_t vram_fetch(uint16_t addr, void *);
+static inline void vram_write(uint16_t addr, uint8_t val, void *);
 static inline uint16_t nametable_horizontal(uint16_t addr);
 static inline uint16_t nametable_vertical(uint16_t addr);
 

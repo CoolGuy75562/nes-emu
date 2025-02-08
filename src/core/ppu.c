@@ -109,21 +109,21 @@ typedef struct ppu_s {
   uint8_t nmi_occurred;
 } ppu_s;
 
-static void state_init(ppu_s *ppu);
-static void state_update(ppu_s *ppu);
+static inline void state_init(ppu_s *ppu);
+static inline void state_update(ppu_s *ppu);
 
-static void increment_ppu(ppu_s *ppu);
+static inline void increment_ppu(ppu_s *ppu);
 static inline void update_nmi(ppu_s *ppu);
-static void background_step(ppu_s *ppu);
-static void sprite_step(ppu_s *ppu);
-static void tile_data_fetch(ppu_s *ppu, uint8_t offset);
-static void render_pixel(ppu_s *ppu);
-static void nt_byte_fetch(ppu_s *ppu);
-static void at_byte_fetch(ppu_s *ppu);
-static void ptt_low_byte_fetch(ppu_s *ppu);
-static void ptt_high_byte_fetch(ppu_s *ppu);
-static void inc_hori_v(ppu_s *ppu);
-static void inc_vert_v(ppu_s *ppu);
+static inline void background_step(ppu_s *ppu);
+static inline void sprite_step(ppu_s *ppu);
+static inline void tile_data_fetch(ppu_s *ppu, uint8_t offset);
+static inline void render_pixel(ppu_s *ppu);
+static inline void nt_byte_fetch(ppu_s *ppu);
+static inline void at_byte_fetch(ppu_s *ppu);
+static inline void ptt_low_byte_fetch(ppu_s *ppu);
+static inline void ptt_high_byte_fetch(ppu_s *ppu);
+static inline void inc_hori_v(ppu_s *ppu);
+static inline void inc_vert_v(ppu_s *ppu);
 
 static inline uint8_t ppustatus_fetch(ppu_s *ppu);
 static inline uint8_t oamdata_fetch(ppu_s *ppu);
@@ -560,7 +560,7 @@ static inline void tile_data_fetch(ppu_s *ppu, uint8_t offset) {
  * first
  */
 static void background_step(ppu_s *ppu) {
-
+  static uint8_t offset;
   /* visible scanlines */
   if (ppu->scanline < 240) {
 
@@ -569,7 +569,7 @@ static void background_step(ppu_s *ppu) {
     }
 
     else if (ppu->cycles <= 256) {
-      uint8_t offset = (ppu->cycles - 1) % 8;
+      offset = (ppu->cycles - 1) % 8;
       tile_data_fetch(ppu, offset);
       if (offset == 7) {
         inc_hori_v(ppu);
@@ -588,7 +588,7 @@ static void background_step(ppu_s *ppu) {
     }
 
     else if (ppu->cycles < 337) {
-      uint8_t offset = (ppu->cycles - 1) % 8;
+      offset = (ppu->cycles - 1) % 8;
       tile_data_fetch(ppu, offset);
       if (offset == 7) {
         inc_hori_v(ppu);
@@ -608,7 +608,7 @@ static void background_step(ppu_s *ppu) {
     }
 
     else if (ppu->cycles < 257) {
-      uint8_t offset = (ppu->cycles - 1) % 8;
+      offset = (ppu->cycles - 1) % 8;
       tile_data_fetch(ppu, offset);
       if (offset == 7) {
         inc_hori_v(ppu);
@@ -629,7 +629,7 @@ static void background_step(ppu_s *ppu) {
     }
 
     else {
-      uint8_t offset = (ppu->cycles - 1) % 8;
+      offset = (ppu->cycles - 1) % 8;
       tile_data_fetch(ppu, offset);
       if (offset == 7) {
         inc_hori_v(ppu);
@@ -642,32 +642,35 @@ static void sprite_step(ppu_s *ppu) {}
 
 static void render_pixel(ppu_s *ppu) {
   // Otherwise tiles are wrong way around
-  uint8_t i = 7 - (ppu->cycles & 7);
+  static uint8_t i, tile_x, tile_y, tile_x_quad_select, tile_y_quad_select,
+    quad_id, at_color_idx, ptt_color_idx, color_idx, palette_idx;
+  
+  i = 7 - (ppu->cycles & 7);
 
-  uint8_t tile_x = ppu->v & MASK_T_V_COARSE_X;
-  uint8_t tile_y = (ppu->v & MASK_T_V_COARSE_Y) >> 5;
+  tile_x = ppu->v & MASK_T_V_COARSE_X;
+  tile_y = (ppu->v & MASK_T_V_COARSE_Y) >> 5;
 
-  uint8_t tile_x_quad_select = tile_x & 2;
-  uint8_t tile_y_quad_select = tile_y & 2;
+  tile_x_quad_select = tile_x & 2;
+  tile_y_quad_select = tile_y & 2;
   
   // make a 2 bit index into 4 colour subpallete using tile_x_quad_select
   // as high bit and tile_y_quad_select as low bit
-  uint8_t quad_id = tile_x_quad_select | (tile_y_quad_select >> 1);
+  quad_id = tile_x_quad_select | (tile_y_quad_select >> 1);
 
   // ???
-  uint8_t at_color_idx = (ppu->at_shift & (0x3 << (quad_id * 2))) >> (quad_id * 2);
+  at_color_idx = (ppu->at_shift & (0x3 << (quad_id * 2))) >> (quad_id * 2);
 
   // Select pixel from tile
-  uint8_t ptt_color_idx =
+  ptt_color_idx =
     (((ppu->ptt_shift_high >> i) & 1) << 1) | ((ppu->ptt_shift_low >> i) & 1);
 
   // AAPP
   // AA : attribute bits
   // PP : pattern bits
-  uint8_t color_idx = (at_color_idx << 2) | ptt_color_idx;
+  color_idx = (at_color_idx << 2) | ptt_color_idx;
 
   // Since we are background rendering for now, start at 3F00
-  uint8_t palette_idx = vram_fetch(0x3F00 + color_idx, vram_fetch_data);
+  palette_idx = vram_fetch(0x3F00 + color_idx, vram_fetch_data);
   put_pixel(ppu->scanline, ppu->cycles, palette_idx, put_pixel_data);
 }
 

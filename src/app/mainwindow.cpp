@@ -132,7 +132,7 @@ void NESCallbackBuffer::ppu_state_update(ppu_state_s state) {
   ppu_state_buffer.push(state);
 }
 
-void NESCallbackBuffer::memory_update(cycle state) {
+void NESCallbackBuffer::memory_state_update(cycle state) {
   memory_state_buffer.push(state);
 }
 
@@ -373,10 +373,6 @@ MainWindow::~MainWindow() { delete ui; }
 void MainWindow::done(void) { QApplication::quitOnLastWindowClosed(); }
 
 void MainWindow::error(NESError e) {
-  /*
-  refresh_cpu_state();
-  refresh_ppu_state();
-  */
   show_error(this, e);
   // QApplication::quit();
 }
@@ -416,7 +412,7 @@ void MainWindow::cb_buffer_mode() {
   connect(callback_forwarder, SIGNAL(ppu_state_update(ppu_state_s)),
           callback_buffer, SLOT(ppu_state_update(ppu_state_s)));
   connect(callback_forwarder, SIGNAL(memory_state_update(cycle)),
-          callback_buffer, SLOT(memory_update(cycle)));
+          callback_buffer, SLOT(memory_state_update(cycle)));
 }
 
 /* above but reversed */
@@ -427,7 +423,7 @@ void MainWindow::cb_single_step_mode() {
   disconnect(callback_forwarder, SIGNAL(ppu_state_update(ppu_state_s)),
              callback_buffer, SLOT(ppu_state_update(ppu_state_s)));
   disconnect(callback_forwarder, SIGNAL(memory_state_update(cycle)),
-             callback_buffer, SLOT(memory_update(cycle)));
+             callback_buffer, SLOT(memory_state_update(cycle)));
 
   connect(callback_forwarder, SIGNAL(cpu_state_update(cpu_state_s)), cpu_model,
           SLOT(addState(cpu_state_s)), Qt::QueuedConnection);
@@ -552,7 +548,7 @@ void MainWindow::init_callback_forwarder() {
           SLOT(addState(cpu_state_s)), Qt::QueuedConnection);
   connect(callback_forwarder, SIGNAL(ppu_state_update(ppu_state_s)), ppu_model,
           SLOT(addState(ppu_state_s)), Qt::QueuedConnection);
-  connect(callback_forwarder, SIGNAL(memory_update(cycle)), memory_model,
+  connect(callback_forwarder, SIGNAL(memory_state_update(cycle)), memory_model,
           SLOT(addState(cycle)), Qt::QueuedConnection);
 }
 

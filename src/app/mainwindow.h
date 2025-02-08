@@ -54,7 +54,7 @@ public:
 public slots:
   void cpu_state_update(cpu_state_s);
   void ppu_state_update(ppu_state_s);
-  void memory_update(cycle);
+  void memory_state_update(cycle);
 
   void start();
   void stop();

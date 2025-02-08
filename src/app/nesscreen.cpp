@@ -37,9 +37,9 @@ void put_pixel(int i, int j, uint8_t palette_idx, void *screen) {
   s->pbuf.at(index) = palette[palette_idx];
   s->pbuf.at(index + 1) = palette[palette_idx + 1];
   s->pbuf.at(index + 2) = palette[palette_idx + 2];
-  if (index + 2 == nes_screen_size - 1) {
+  /*  if (index + 2 == nes_screen_size - 1) {
     s->emit pbuf_full();
-  }
+    }*/
 }
 
 void pt_put_pixel(int y, int x, uint8_t palette_idx, void *pt_viewer) {

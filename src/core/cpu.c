@@ -482,6 +482,8 @@ static inline void SRE(cpu_s *cpu, addr_mode_e mode);
 static inline void RRA(cpu_s *cpu, addr_mode_e mode);
 
 static inline void update_flags(cpu_s *cpu);
+static inline void update_cpu_state(cpu_s *cpu);
+
 static void (*on_cpu_state_update)(const cpu_state_s *, void *) = NULL;
 static void *on_cpu_state_update_data = NULL;
 
@@ -509,7 +511,7 @@ static void NMI(cpu_s *cpu) {
 }
 //static void IRQ(cpu_s *cpu) {}
 
-static void update_cpu_state(cpu_s *cpu);
+
 
 static void update_cpu_state(cpu_s *cpu) {
   cpu_state.a = cpu->a;
