@@ -33,6 +33,7 @@ OpenGLWidget::~OpenGLWidget() {
 }
 
 void OpenGLWidget::initScreen(NESScreen *s) {
+  // This definitely doesn't work with multithreading
   pbuf_ptr = s->getPBufPtr();
   QTimer *timer = new QTimer(this);
   connect(timer, SIGNAL(timeout()), this, SLOT(update()));

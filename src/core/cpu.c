@@ -352,22 +352,6 @@ enum {
   NEGATIVE_SHIFT = 7
 };
 
-typedef struct cpu_s {
-  uint8_t a; // Accumulator register
-  uint8_t x; // X, Y registers, used for indexing
-  uint8_t y;
-  uint16_t pc; // Programme counter
-  uint8_t sp;  // Stack pointer
-  uint8_t flags;
-  uint16_t to_update_flags; /* 0: No, 1: Yes, 2: After next instruction */
-  uint8_t new_int_disable_flag;
-  uint8_t to_oamdma;
-  uint16_t cycles;
-  uint8_t to_nmi;
-  uint8_t in_nmi;
-  uint8_t to_irq;
-} cpu_s;
-
 static inline uint16_t zero_page(cpu_s *cpu);
 static inline uint16_t zero_page_x(cpu_s *cpu);
 static inline uint16_t zero_page_y(cpu_s *cpu);
@@ -482,7 +466,7 @@ static inline void SRE(cpu_s *cpu, addr_mode_e mode);
 static inline void RRA(cpu_s *cpu, addr_mode_e mode);
 
 static inline void update_flags(cpu_s *cpu);
-static inline void update_cpu_state(cpu_s *cpu);
+static inline void update_cpu_state(const cpu_s *cpu);
 
 static void (*on_cpu_state_update)(const cpu_state_s *, void *) = NULL;
 static void *on_cpu_state_update_data = NULL;
@@ -513,7 +497,7 @@ static void NMI(cpu_s *cpu) {
 
 
 
-static void update_cpu_state(cpu_s *cpu) {
+static void update_cpu_state(const cpu_s *cpu) {
   cpu_state.a = cpu->a;
   cpu_state.x = cpu->x;
   cpu_state.y = cpu->y;
@@ -556,6 +540,34 @@ void cpu_init_harte_test_case(cpu_s *cpu, cpu_state_s *test_case) {
   update_cpu_state(cpu);
 }
 
+int cpu_init_no_alloc(cpu_s *cpu, uint8_t nestest) {
+  if (on_cpu_state_update == NULL || log_error == NULL) {
+    return -E_NO_CALLBACK;
+  }
+  
+  cpu->a = 0;
+  cpu->x = 0;
+  cpu->y = 0;
+  cpu->sp = 0xFD;
+  cpu->flags = FLAG_UNUSED | FLAG_INT_DISABLE;
+  cpu->to_oamdma = 0;
+  cpu->to_update_flags = 0;
+  cpu->to_irq = 0;
+  cpu->to_nmi = 0;
+  cpu->in_nmi = 0;
+
+  if (!nestest) {
+    cpu->cycles = 0;
+    cpu->pc = fetch16(cpu, 0xFFFC);
+  } else {
+    cpu->pc = 0xC000;
+    cpu->cycles = 7;
+  }
+  SET_INSTRUCTION(JMP, 0x40 + JMP_OFFSET, ABS);
+  update_cpu_state(cpu);
+  return E_NO_ERROR;
+}
+  
 int cpu_init(cpu_s **p_cpu, uint8_t nestest) {
   if (on_cpu_state_update == NULL || log_error == NULL) {
     return -E_NO_CALLBACK;
@@ -600,10 +612,11 @@ void cpu_destroy(cpu_s *cpu) { free(cpu); }
 /* Fetches next opcode and executes next instruction.
  * TODO: Proper interrupt handling
  */
-int cpu_exec(cpu_s *cpu, char *e_context) {
+int cpu_exec(cpu_s *cpu) {
+  /*
   if (on_cpu_state_update == NULL || log_error == NULL) {
     return -E_NO_CALLBACK;
-  }
+    }*/
 #ifndef DOING_HARTE_TESTS
   update_cpu_state(cpu);
   update_flags(cpu);
@@ -690,7 +703,8 @@ int cpu_exec(cpu_s *cpu, char *e_context) {
       IS_ILLEGAL_RMW_OPC(RRA)
 	
     default:
-      sprintf(e_context, "%02x", opc);
+      update_cpu_state(cpu);
+      on_cpu_state_update(&cpu_state, on_cpu_state_update_data);
       return -E_ILLEGAL_OPC;
     }
   }
@@ -699,7 +713,7 @@ int cpu_exec(cpu_s *cpu, char *e_context) {
   update_cpu_state(cpu);
 #endif
   on_cpu_state_update(&cpu_state, on_cpu_state_update_data);
-  return 1;
+  return E_NO_ERROR;
 }
 
 /*==============================================================================

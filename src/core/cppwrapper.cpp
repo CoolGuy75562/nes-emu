@@ -65,6 +65,13 @@ void nes_ppu_init(ppu_s **ppu, void (*put_pixel)(int, int, uint8_t, void *), voi
   }
 }
 
+void nes_ppu_init_no_alloc(ppu_s *ppu, void (*put_pixel)(int, int, uint8_t, void *), void *put_pixel_data) {
+  int err;
+  if ((err = ppu_init_no_alloc(ppu, put_pixel, put_pixel_data)) < 0) {
+    throw NESError(-err);
+  }
+}
+
 void nes_cpu_init(cpu_s **cpu, int nestest) {
   int err;
   if ((err = cpu_init(cpu, nestest)) < 0) {
@@ -72,14 +79,16 @@ void nes_cpu_init(cpu_s **cpu, int nestest) {
   }
 }
 
-int nes_cpu_exec(cpu_s *cpu) {
-  static char e_context[LEN_E_CONTEXT];
-  static int exec_status;
-  *e_context = '\0';
-
-  exec_status = cpu_exec(cpu, e_context);
-  if (exec_status < 0) {
-    throw NESError(-exec_status, std::string(e_context));
+void nes_cpu_init_no_alloc(cpu_s *cpu, int nestest) {
+  int err;
+  if ((err = cpu_init_no_alloc(cpu, nestest) < 0)) {
+        throw NESError(-err);
   }
-  return exec_status;
+}
+
+void nes_cpu_exec(cpu_s *cpu) {
+  static int exec_status;
+  if ((exec_status = cpu_exec(cpu)) < 0) {
+    throw NESError(-exec_status);
+  }
 }

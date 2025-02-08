@@ -7,8 +7,7 @@ NESContext::NESContext(const std::string &rom_filename,
 		       uint8_t (*get_pressed_buttons_cb)(void *),
 		       void *get_pressed_buttons_data,
 		       QObject *parent)
-    : QObject(parent), cpu_ptr(nullptr, &cpu_destroy),
-      ppu_ptr(nullptr, &ppu_destroy) {
+    : QObject(parent) {
 
   nes_timer = new QTimer(this);
   nes_timer->setInterval(0);
@@ -16,21 +15,17 @@ NESContext::NESContext(const std::string &rom_filename,
   
   /* init ppu_ptr */
   qDebug() << "NESContext: Initialising ppu";
-  ppu_s *ppu = nullptr;
-  nes_ppu_init(&ppu, put_pixel, put_pixel_data);
-  ppu_ptr.reset(ppu);
+  nes_ppu_init_no_alloc(&ppu, put_pixel, put_pixel_data);
 
   qDebug() << "NESContext: Initialising controller";
   controller_init(get_pressed_buttons_cb, get_pressed_buttons_data);
   
   qDebug() << "NESContext: Initialising memory";
-  nes_memory_init(rom_filename, ppu_ptr.get());
+  nes_memory_init(rom_filename, &ppu);
 
   /* init cpu_ptr */
   qDebug() << "NESContext: Initialising cpu";
-  cpu_s *cpu = nullptr;
-  nes_cpu_init(&cpu, 0);
-  cpu_ptr.reset(cpu);
+  nes_cpu_init_no_alloc(&cpu, 0);
   qDebug() << "NESContext: Init done";
 }
 
@@ -38,9 +33,7 @@ NESContext::NESContext(const std::string &rom_filename,
 
 void NESContext::nes_tick(void) {
   try {
-    if (nes_cpu_exec(cpu_ptr.get()) == 0) {
-      emit nes_done();
-    }
+    nes_cpu_exec(&cpu);
   } catch (NESError &e) {
     nes_timer->stop();
     emit nes_error(e);
@@ -61,3 +54,4 @@ void NESContext::nes_pause() {
   nes_timer->stop();
   emit nes_paused();
 }
+

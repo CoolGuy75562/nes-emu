@@ -53,8 +53,8 @@ static int parse_ines_header(char ines_header[16], ines_header_s *header_data,
                              char *e_context);
 static int init_mapper_0(ines_header_s *header_data, FILE *fp, char *e_context);
 static inline void do_three_ppu_steps(uint8_t *to_nmi);
-static inline uint8_t vram_fetch(uint16_t addr, void *);
-static inline void vram_write(uint16_t addr, uint8_t val, void *);
+static inline uint8_t vram_fetch(uint16_t addr);
+static inline void vram_write(uint16_t addr, uint8_t val);
 static inline uint16_t nametable_horizontal(uint16_t addr);
 static inline uint16_t nametable_vertical(uint16_t addr);
 
@@ -355,8 +355,8 @@ void memory_do_oamdma(uint8_t val, uint16_t *cycles, uint8_t *to_nmi) {
 }
 
 uint8_t memory_fetch(uint16_t addr, uint8_t *to_nmi) {
-  uint8_t val;
-  uint16_t effective_addr;
+  static uint8_t val;
+  static uint16_t effective_addr;
   if (ppu == NULL) { /* no ppu mode */
     effective_addr = addr;
     val = memory_cpu[addr];
@@ -410,7 +410,7 @@ uint8_t memory_fetch(uint16_t addr, uint8_t *to_nmi) {
 void memory_write(uint16_t addr, uint8_t val, uint8_t *to_oamdma,
                   uint8_t *to_nmi) {
 
-  uint16_t effective_addr;
+  static uint16_t effective_addr;
   if (ppu == NULL) { /* no ppu mode */
     effective_addr = addr;
     memory_cpu[effective_addr] = val;
@@ -540,13 +540,13 @@ static int init_mapper_0(ines_header_s *header_data, FILE *fp,
   }
   nametable_mirror = (header_data->nt_arrangement) ? &nametable_vertical
                                                   : &nametable_horizontal;
-  ppu_register_vram_fetch_callback(&vram_fetch, NULL);
-  ppu_register_vram_write_callback(&vram_write, NULL);
+  ppu_register_vram_fetch_callback(&vram_fetch);
+  ppu_register_vram_write_callback(&vram_write);
   
   return E_NO_ERROR;
 }
 
-static uint8_t vram_fetch(uint16_t addr, void *data) {
+static uint8_t vram_fetch(uint16_t addr) {
   if (addr < 0x2000) {
     return memory_ppu[addr];
   }
@@ -560,7 +560,7 @@ static uint8_t vram_fetch(uint16_t addr, void *data) {
   }
 }
 
-static void vram_write(uint16_t addr, uint8_t val, void *data) {
+static void vram_write(uint16_t addr, uint8_t val) {
   if (addr < 0x2000) {
     memory_ppu[addr] = val;
   }

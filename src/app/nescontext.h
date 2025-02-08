@@ -33,8 +33,8 @@ signals:
 
 private:
   QTimer *nes_timer;
-  std::unique_ptr<cpu_s, void (*)(cpu_s *)> cpu_ptr;
-  std::unique_ptr<ppu_s, void (*)(ppu_s *)> ppu_ptr;
+  cpu_s cpu;
+  ppu_s ppu;
 
 private slots:
   void nes_tick(void);

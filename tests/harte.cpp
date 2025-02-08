@@ -82,7 +82,7 @@ bool Harte::is_valid_opcode(int test_id) {
   cpu_init_harte_test_case(cpu_ptr.get(), &state);
   
   /* now pc is pointing to test_id and will be read as next opcode */
-  return (cpu_exec(cpu_ptr.get(), e_context) == 1);
+  return (cpu_exec(cpu_ptr.get()) == E_NO_ERROR);
 }
 
 /* TODO: Check valid json etc, though rapidjson should do that
@@ -150,7 +150,7 @@ bool Harte::do_next_harte_case(harte_case &hc_expected, harte_case &hc_actual,
                               hc_initial.vals->size());
   cpu_init_harte_test_case(cpu_ptr.get(), hc_initial.cpu_state);
 
-  cpu_exec(cpu_ptr.get(), e_context);
+  cpu_exec(cpu_ptr.get());
 
   memory_reset_harte(hc_actual.addrs->data(), hc_actual.vals->data(),
                      hc_actual.vals->size());

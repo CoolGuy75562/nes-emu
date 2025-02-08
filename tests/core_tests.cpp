@@ -169,17 +169,6 @@ BOOST_AUTO_TEST_CASE(cpu_test) {
 
   cpu_unregister_error_callback();
   cpu_unregister_state_callback();
-
-  BOOST_CHECK(cpu_exec(cpu, e_context) == -E_NO_CALLBACK);
-
-  cpu_register_error_callback(&cb_error_none);
-  BOOST_CHECK(cpu_exec(cpu, e_context) == -E_NO_CALLBACK);
-  cpu_unregister_error_callback();
-
-  cpu_register_state_callback(&cb_cpu_none, NULL);
-  BOOST_CHECK(cpu_exec(cpu, e_context) == -E_NO_CALLBACK);
-  cpu_unregister_state_callback();
-
   ppu_unregister_state_callback();
   ppu_unregister_error_callback();
   memory_unregister_cb(MEMORY_CB_WRITE);

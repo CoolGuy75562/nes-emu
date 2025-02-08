@@ -56,68 +56,15 @@
 
 #define IGNORE_REG_WRITE_CYCLES 29657
 
-typedef struct ppu_s {
-  /* memory-mapped registers */
-  uint8_t ppuctrl;     /* 0x2000 */
-  uint8_t ppumask;     /* 0x2001 */
-  uint8_t oamaddr;     /* 0x2003 */
-  uint8_t ppuscroll_x; /* 0x2005 */
-  uint8_t ppuscroll_y;
-  uint8_t ppuaddr_high; /* 0x2006 */
-  uint8_t ppuaddr_low;
-  uint8_t oamdma;     /* 0x4014 */
-  uint8_t ppustatus;  /* 0x2002 */
-  uint8_t oamdata;    /* 0x2004 */
-  uint8_t ppudata;    /* 0x2007 */
-  uint8_t ppudata_rb; /* ppudata read buffer */
-
-  /* data bus:
-   * set to value written to any memory-mapped register.
-   * reading a write-only register returns value on data bus.
-   * unused bits in ppustatus are corresponding bits on data bus,
-   * i.e., ppu_db = ABCDEFGH, ppustatus = 123xxxxx,
-   *       read ppustatus -> 123DEFGH
-   * (I think)
-   */
-  uint8_t ppu_db;
-
-  /* internal registers */
-  uint8_t w;
-  uint8_t x;
-  uint16_t t;
-  uint16_t v;
-
-  /* internal registers for tile data */
-  uint8_t nt_byte;
-  uint8_t at_byte;
-  uint8_t ptt_low;
-  uint8_t ptt_high;
-
-  /* tile shift registers */
-  uint16_t at_shift;
-  uint16_t ptt_shift_low;
-  uint16_t ptt_shift_high;
-
-  /* other things to keep track of */
-  uint16_t cycles;
-  uint16_t scanline;
-  uint32_t total_cycles;
-  uint8_t ready_to_write;
-  uint8_t frame_parity;        /* 0: even, 1: odd */
-  uint8_t to_toggle_rendering; /* counts down each dot, toggles rendering when
-                                  reaches 1 */
-  uint8_t nmi_occurred;
-} ppu_s;
-
-static inline void state_init(ppu_s *ppu);
-static inline void state_update(ppu_s *ppu);
+static inline void state_init(const ppu_s *ppu);
+static inline void state_update(const ppu_s *ppu);
 
 static inline void increment_ppu(ppu_s *ppu);
 static inline void update_nmi(ppu_s *ppu);
 static inline void background_step(ppu_s *ppu);
 static inline void sprite_step(ppu_s *ppu);
 static inline void tile_data_fetch(ppu_s *ppu, uint8_t offset);
-static inline void render_pixel(ppu_s *ppu);
+static inline void render_pixel(const ppu_s *ppu);
 static inline void nt_byte_fetch(ppu_s *ppu);
 static inline void at_byte_fetch(ppu_s *ppu);
 static inline void ptt_low_byte_fetch(ppu_s *ppu);
@@ -144,21 +91,19 @@ static uint8_t memory_oam[0x100] = {0};
 static uint8_t memory_secondary_oam[32] = {0};
 
 /* callbacks */
-static uint8_t default_fetch(uint16_t a, void *d) { return 0;}
-static void default_write(uint16_t a, uint8_t v, void *d) {}
+static uint8_t default_fetch(uint16_t a) { return 0;}
+static void default_write(uint16_t a, uint8_t v) {}
 
 static void (*log_error)(const char *, ...) = NULL;
 static void (*on_ppu_state_update)(const ppu_state_s *ppu_state,
                                    void *data) = NULL;
 static void (*put_pixel)(int i, int j, uint8_t palette_idx, void *data) = NULL;
-static uint8_t (*vram_fetch)(uint16_t addr, void *data) = &default_fetch;
-static void (*vram_write)(uint16_t addr, uint8_t val, void *data) = &default_write;
+static uint8_t (*vram_fetch)(uint16_t addr) = &default_fetch;
+static void (*vram_write)(uint16_t addr, uint8_t val) = &default_write;
 
 /* callback data */
 static void *on_ppu_state_update_data = NULL;
 static void *put_pixel_data = NULL;
-static void *vram_fetch_data = NULL;
-static void *vram_write_data = NULL;
 
 /*----------------------------------------------------------------------------*/
 
@@ -172,9 +117,9 @@ void ppu_draw_pattern_table(uint8_t is_right,
       for (uint8_t row = 0; row < 8; row++) {
 
         uint8_t tile_low =
-            vram_fetch(is_right * 0x1000 + tile_offset + row, vram_fetch_data);
+            vram_fetch(is_right * 0x1000 + tile_offset + row);
         uint8_t tile_high = vram_fetch(
-            is_right * 0x1000 + tile_offset + row + 8, vram_fetch_data);
+            is_right * 0x1000 + tile_offset + row + 8);
 
         for (uint8_t col = 0; col < 8; col++) {
 
@@ -206,17 +151,25 @@ void ppu_register_error_callback(void (*log_error_cb)(const char *, ...)) {
 
 void ppu_unregister_error_callback(void) { log_error = NULL; }
 
-void ppu_register_vram_fetch_callback(uint8_t (*callback)(uint16_t, void *),
-                                      void *data) {
+void ppu_register_vram_fetch_callback(uint8_t (*callback)(uint16_t)) {
   vram_fetch = callback;
-  vram_fetch_data = data;
 }
 
-void ppu_register_vram_write_callback(void (*callback)(uint16_t, uint8_t,
-                                                       void *),
-                                      void *data) {
+void ppu_register_vram_write_callback(void (*callback)(uint16_t, uint8_t)) {
   vram_write = callback;
-  vram_write_data = data;
+}
+
+int ppu_init_no_alloc(ppu_s *ppu, void (*put_pixel_cb)(int, int, uint8_t, void *),
+             void *data) {
+  put_pixel = put_pixel_cb;
+  put_pixel_data = data;
+  if (on_ppu_state_update == NULL || log_error == NULL) {
+    return -E_NO_CALLBACK;
+  }
+  ppu->ppustatus = 0xA0;
+  state_init(ppu);
+  // on_ppu_state_update(&ppu_state, on_ppu_state_update_data);
+  return E_NO_ERROR;
 }
 
 int ppu_init(ppu_s **p, void (*put_pixel_cb)(int, int, uint8_t, void *),
@@ -239,36 +192,46 @@ int ppu_init(ppu_s **p, void (*put_pixel_cb)(int, int, uint8_t, void *),
 void ppu_destroy(ppu_s *ppu) { free(ppu); }
 
 void ppu_step(ppu_s *ppu, uint8_t *to_nmi) {
+  static uint8_t is_rendering;
+  
+  is_rendering = ((ppu->ppumask &
+                   (MASK_PPUMASK_BG_R_ENABLE | MASK_PPUMASK_SPRITE_R_ENABLE)));
+  
 
+  
   /* ppuctrl write could have set nmi */
   *to_nmi |= ppu->nmi_occurred;
 
-  /* if rendering enabled */
-  if ((ppu->ppumask & MASK_PPUMASK_BG_R_ENABLE) ||
-      (ppu->ppumask & MASK_PPUMASK_SPRITE_R_ENABLE)) {
+  if (is_rendering) {
     background_step(ppu);
     sprite_step(ppu);
+    if (ppu->scanline < 240 && ppu->cycles < 256) {
+    render_pixel(ppu);
+    }
   }
+
+  // Start of vblank
   if (ppu->scanline == 241 && ppu->cycles == 1) {
     ppu->ppustatus |= MASK_PPUSTATUS_VBLANK;
     update_nmi(ppu);
     *to_nmi |= ppu->nmi_occurred;
   }
+
+  // End of vblank
   if (ppu->scanline == 261 && ppu->cycles == 1) {
     ppu->ppustatus &= ~MASK_PPUSTATUS_ALL;
     update_nmi(ppu);
     *to_nmi |= ppu->nmi_occurred;
   }
 
-  if (ppu->scanline < 240 && ppu->cycles < 256) {
-    render_pixel(ppu);
-  }
   increment_ppu(ppu);
+  /*
   ppu->total_cycles++;
   if (!ppu->ready_to_write && ppu->total_cycles > 3 * IGNORE_REG_WRITE_CYCLES) {
     ppu->ready_to_write = 1;
   }
-
+  */
+  
   /* or this cycle could have set nmi  */
   *to_nmi |= ppu->nmi_occurred;
   ppu->nmi_occurred = 0;
@@ -338,10 +301,9 @@ void ppu_register_write(ppu_s *ppu, uint16_t addr, uint8_t val,
   }
 }
 
-static void state_init(ppu_s *ppu) { state_update(ppu); }
+static void state_init(const ppu_s *ppu) { state_update(ppu); }
 
-/* will be slow if call often... */
-static void state_update(ppu_s *ppu) {
+static void state_update(const ppu_s *ppu) {
   ppu_state.cycles = ppu->cycles;
   ppu_state.scanline = ppu->scanline;
   ppu_state.ppuctrl = ppu->ppuctrl;
@@ -360,40 +322,29 @@ static void state_update(ppu_s *ppu) {
 /*------------------------------tile
  * fetching--------------------------------*/
 static void nt_byte_fetch(ppu_s *ppu) {
-  /*
-  uint16_t addr = 0x2000 + 0x400 * ((ppu->v & MASK_T_V_NAMETABLE) >> 10);
-  addr +=
-  (ppu->v & MASK_T_V_COARSE_X) | (ppu->v & MASK_T_V_COARSE_Y);*/
-
   /* according to wiki: */
-  uint16_t addr = 0x2000 | (ppu->v & 0xFFF);
-  ppu->nt_byte = vram_fetch(addr, vram_fetch_data);
+  ppu->nt_byte = vram_fetch(0x2000 | (ppu->v & 0xFFF));
 }
 
-static void at_byte_fetch(ppu_s *ppu) { /*
-uint16_t addr = 0x23C0 + 0x400 * ((ppu->v & MASK_T_V_NAMETABLE >> 10));
-TODO: fix
-addr += (ppu->v & MASK_T_V_COARSE_X >> 2) |
-(ppu->v & MASK_T_V_COARSE_Y >> 2);
-*/
-  /* according to wiki: */
+static void at_byte_fetch(ppu_s *ppu) {
+ /* according to wiki: */
   uint16_t addr = 0x23C0 | (ppu->v & MASK_T_V_NAMETABLE) |
                   ((ppu->v >> 4) & 0x38) | ((ppu->v >> 2) & 0x07);
-  ppu->at_byte = vram_fetch(addr, vram_fetch_data);
+  ppu->at_byte = vram_fetch(addr);
 }
 
 static void ptt_low_byte_fetch(ppu_s *ppu) {
   uint16_t addr = (ppu->v & MASK_T_V_FINE_Y) >> 12;
   addr += (ppu->nt_byte << 4);
   addr += (ppu->ppuctrl & MASK_PPUCTRL_BT_SELECT) ? 0x1000 : 0;
-  ppu->ptt_low = vram_fetch(addr, vram_fetch_data);
+  ppu->ptt_low = vram_fetch(addr);
 }
 
 static void ptt_high_byte_fetch(ppu_s *ppu) {
   uint16_t addr = ((ppu->v & MASK_T_V_FINE_Y) >> 12) + 8;
   addr += (ppu->nt_byte << 4);
   addr += (ppu->ppuctrl & MASK_PPUCTRL_BT_SELECT) ? 0x1000 : 0;
-  ppu->ptt_high = vram_fetch(addr, vram_fetch_data);
+  ppu->ptt_high = vram_fetch(addr);
 }
 
 /*-------------------------memory-mapped register reads
@@ -413,7 +364,7 @@ static uint8_t oamdata_fetch(ppu_s *ppu) { return memory_oam[ppu->oamaddr]; }
 
 static uint8_t ppudata_fetch(ppu_s *ppu) {
   uint8_t val = ppu->ppudata_rb;
-  ppu->ppudata_rb = vram_fetch(ppu->v & MASK_T_V_ADDR_ALL, vram_fetch_data);
+  ppu->ppudata_rb = vram_fetch(ppu->v & MASK_T_V_ADDR_ALL);
 
   /* Increment VRAM address by 1 or 32, depending on PPUCTRL second bit */
   ppu->v += (ppu->ppuctrl & MASK_PPUCTRL_INCREMENT) ? 32 : 1;
@@ -486,7 +437,7 @@ static void ppudata_write(ppu_s *ppu, uint8_t val) {
   if (!(ppu->ppumask & MASK_PPUMASK_BG_R_ENABLE ||
         ppu->ppumask & MASK_PPUMASK_SPRITE_R_ENABLE)) {
     /* not rendering */
-    vram_write(ppu->v & MASK_T_V_ADDR_ALL, val, vram_write_data);
+    vram_write(ppu->v & MASK_T_V_ADDR_ALL, val);
   }
   ppu->v += (ppu->ppuctrl & MASK_PPUCTRL_INCREMENT) ? 32 : 1;
   ppu->v &= MASK_T_V_SCROLL_ALL;
@@ -550,97 +501,42 @@ static inline void tile_data_fetch(ppu_s *ppu, uint8_t offset) {
     break;
   case 7:
     ptt_high_byte_fetch(ppu);
+    inc_hori_v(ppu);
     break;
   }
 }
 
 /*------------------------------the meat--------------------------------*/
 
-/* this has a lot of repitition going on but just trying to make it work
- * first
- */
 static void background_step(ppu_s *ppu) {
-  static uint8_t offset;
-  /* visible scanlines */
-  if (ppu->scanline < 240) {
+  // If rendering scanline
+  if (ppu->scanline < 240 || ppu->scanline == 261) {
 
-    if (ppu->cycles == 0) {
-      /* do nothing */
-    }
-
-    else if (ppu->cycles <= 256) {
-      offset = (ppu->cycles - 1) % 8;
+    // If rendering cycle
+    if (((ppu->cycles > 0) && (ppu->cycles < 257)) ||
+             ((ppu->cycles > 320) && (ppu->cycles < 337))) {
+      uint8_t offset = (ppu->cycles - 1) % 8;
       tile_data_fetch(ppu, offset);
-      if (offset == 7) {
-        inc_hori_v(ppu);
-        if (ppu->cycles == 256) {
+      
+      if (ppu->cycles == 256) {
           inc_vert_v(ppu);
         }
-      }
     }
 
     else if (ppu->cycles == 257) {
       copy_hori_v_t(ppu);
     }
 
-    else if (ppu->cycles < 321) {
-      /* sprite stuff happens */
-    }
-
-    else if (ppu->cycles < 337) {
-      offset = (ppu->cycles - 1) % 8;
-      tile_data_fetch(ppu, offset);
-      if (offset == 7) {
-        inc_hori_v(ppu);
-      }
-    }
-  }
-
-  /* post render scanlines */
-  else if (ppu->scanline < 261) {
-  }
-
-  /* pre render scanline (261) */
-  else {
-
-    if (ppu->cycles == 0) {
-      /* do nothing */
-    }
-
-    else if (ppu->cycles < 257) {
-      offset = (ppu->cycles - 1) % 8;
-      tile_data_fetch(ppu, offset);
-      if (offset == 7) {
-        inc_hori_v(ppu);
-        if (ppu->cycles == 256) {
-          inc_vert_v(ppu);
-        }
-      }
-    }
-
-    else if (ppu->cycles == 257) {
-      copy_hori_v_t(ppu);
-    }
-
-    else if (ppu->cycles < 321) {
-      if (ppu->cycles > 279 && ppu->cycles < 305) {
-        copy_vert_v_t(ppu);
-      }
-    }
-
-    else {
-      offset = (ppu->cycles - 1) % 8;
-      tile_data_fetch(ppu, offset);
-      if (offset == 7) {
-        inc_hori_v(ppu);
-      }
+    if (ppu->scanline == 261 && ((ppu->cycles > 279) && (ppu->cycles < 305))) {
+      copy_vert_v_t(ppu);
     }
   }
 }
 
+
 static void sprite_step(ppu_s *ppu) {}
 
-static void render_pixel(ppu_s *ppu) {
+static void render_pixel(const ppu_s *ppu) {
   // Otherwise tiles are wrong way around
   static uint8_t i, tile_x, tile_y, tile_x_quad_select, tile_y_quad_select,
     quad_id, at_color_idx, ptt_color_idx, color_idx, palette_idx;
@@ -670,7 +566,7 @@ static void render_pixel(ppu_s *ppu) {
   color_idx = (at_color_idx << 2) | ptt_color_idx;
 
   // Since we are background rendering for now, start at 3F00
-  palette_idx = vram_fetch(0x3F00 + color_idx, vram_fetch_data);
+  palette_idx = vram_fetch(0x3F00 + color_idx);
   put_pixel(ppu->scanline, ppu->cycles, palette_idx, put_pixel_data);
 }
 
